@@ -1,7 +1,25 @@
 apiVersion: 1
+
+# Stale copies from the single-org era. Main Org (1) keeps no datasources;
+# each tenant org owns only its own (ubix=2, digiflow=3).
+deleteDatasources:
+  - name: ubix-metrics
+    orgId: 1
+  - name: ubix-logs
+    orgId: 1
+  - name: ubix-traces
+    orgId: 1
+  - name: digiflow-metrics
+    orgId: 1
+  - name: digiflow-logs
+    orgId: 1
+  - name: digiflow-traces
+    orgId: 1
+
 datasources:
   - name: ubix-metrics
     type: prometheus
+    orgId: 2
     url: http://mimir:9009/prometheus
     jsonData:
       httpHeaderName1: X-Scope-OrgID
@@ -10,6 +28,7 @@ datasources:
 
   - name: ubix-logs
     type: loki
+    orgId: 2
     url: http://loki:3100
     jsonData:
       httpHeaderName1: X-Scope-OrgID
@@ -18,6 +37,7 @@ datasources:
 
   - name: digiflow-metrics
     type: prometheus
+    orgId: 3
     url: http://mimir:9009/prometheus
     jsonData:
       httpHeaderName1: X-Scope-OrgID
@@ -26,6 +46,7 @@ datasources:
 
   - name: digiflow-logs
     type: loki
+    orgId: 3
     url: http://loki:3100
     jsonData:
       httpHeaderName1: X-Scope-OrgID
@@ -34,6 +55,7 @@ datasources:
 
   - name: ubix-traces
     type: tempo
+    orgId: 2
     url: http://tempo:3200
     jsonData:
       httpHeaderName1: X-Scope-OrgID
@@ -42,6 +64,7 @@ datasources:
 
   - name: digiflow-traces
     type: tempo
+    orgId: 3
     url: http://tempo:3200
     jsonData:
       httpHeaderName1: X-Scope-OrgID

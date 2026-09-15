@@ -178,8 +178,12 @@ idempotent, preserves comments). Full guides in [`runbook/`](runbook/):
    `deploy/collector/tenant-routing.yml`, `deploy/collector/collector-config.yml`
    (receiver on the next `43xx` port, `transform/<id>_identity`, three exporters,
    three pipelines), `compose.prod.yml` (`GATEWAY_TENANTS`, `<ID>_OTEL_TOKEN`,
-   `<ID>_UPSTREAM`), and `.env.example`. Review the diff, run
+   `<ID>_UPSTREAM`, Grafana `ORG_MAPPING`), `grafana/datasources.yml` (three
+   datasources scoped to the tenant org id), and `.env.example`. Review the diff, run
    `python3 -m pytest gateway/tests/ tests/ -v`, redeploy.
+   Then create the Grafana org against the running Grafana (manual — orgs cannot
+   be file-provisioned): its id must match the script's `--grafana-org-id`,
+   else re-run with the actual id. Full checklist: Variant A §1b.
 2. Register ownership and environments in `projects/tenants.yml` (done by the script).
    Create Keycloak groups and Grafana organization (manual, not in this repo).
 3. Create the project machine credential and store it in the secret manager:
@@ -220,7 +224,7 @@ The platform must fail visibly. Silent telemetry loss is an incident.
 
 | File | Purpose |
 |------|---------|
-| [`scripts/add-tenant.py`](scripts/add-tenant.py) | Automate tenant onboarding (edits the 5 registry/config files + prints token) |
+| [`scripts/add-tenant.py`](scripts/add-tenant.py) | Automate tenant onboarding (edits the 7 registry/config files + prints token; Grafana org creation stays manual) |
 | [`runbook/`](runbook/) | Onboarding runbooks: Variant A (local collector), Variant B (direct OTLP, external Java) |
 | [`projects/collector-template.yml`](projects/collector-template.yml) | Copy-paste local collector config for projects |
 | [`projects/tenants.yml`](projects/tenants.yml) | Tenant registry (source of truth for onboarding) |

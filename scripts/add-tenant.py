@@ -6,18 +6,25 @@ Idempotently edits (text-preserving, no YAML round-trip so comments survive):
   - projects/tenants.yml
   - deploy/collector/tenant-routing.yml
   - deploy/collector/collector-config.yml
-  - compose.prod.yml
+  - compose.prod.yml (gateway wiring + Grafana org mapping)
   - .env.example
+  - grafana/datasources.yml (3 per-tenant datasources scoped to the tenant org)
 
 It never writes real secrets to the repo. It generates a token with
 ``secrets.token_hex(32)`` (equivalent to ``openssl rand -hex 32``), prints the
 ``export`` line for the secret manager, and writes only a
 ``changeme-<tenant>-token`` placeholder to ``.env.example``.
 
+Grafana org creation is NOT automated: orgs can only be created against a
+running Grafana (API/UI), so the script reserves the next free org id,
+writes the files against it, and prints the manual org-creation step.
+If the created org gets a different id, re-run with --grafana-org-id.
+
 Usage:
   python3 scripts/add-tenant.py onboarding
   python3 scripts/add-tenant.py onboarding --display-name Onboarding --dry-run
   python3 scripts/add-tenant.py onboarding --port 4321 --no-token
+  python3 scripts/add-tenant.py onboarding --grafana-org-id 4
 
 After running:
   python3 -m pytest gateway/tests/ tests/ -v
@@ -36,6 +43,7 @@ ROUTING = ROOT / "deploy/collector/tenant-routing.yml"
 COLLECTOR_CFG = ROOT / "deploy/collector/collector-config.yml"
 COMPOSE = ROOT / "compose.prod.yml"
 ENV_EXAMPLE = ROOT / ".env.example"
+DATASOURCES = ROOT / "grafana/datasources.yml"
 
 TENANT_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 
@@ -269,6 +277,58 @@ def add_env_example(text, tenant):
     return text + f"{prefix}_OTEL_TOKEN=changeme-{tenant}-token\n", True
 
 
+def next_free_org_id(text, default=2):
+    ids = [int(i) for i in re.findall(r"orgId:\s*(\d+)", text)]
+    return max(ids) + 1 if ids else default
+
+
+def add_datasources(text, tenant, org_id, template="digiflow"):
+    # Only the datasources: section carries full blocks; the
+    # deleteDatasources: section above it has same-indented 2-line
+    # entries that must never be used as copy templates.
+    sec = re.search(r"^datasources:\s*$\n?", text, re.M)
+    if not sec:
+        fail("datasources: section not found in grafana/datasources.yml")
+    head, body = text[: sec.end()], text[sec.end():]
+    changed = False
+    for sig in ("metrics", "logs", "traces"):
+        if re.search(rf"^  - name: {re.escape(tenant)}-{sig}\s*$", body, re.M):
+            continue  # already present: idempotent
+        m = re.search(
+            rf"(^  - name: {re.escape(template)}-{sig}\s*\n(?:.*\n)*?)"
+            r"(?=^  - name: |\Z|^# Repeat)",
+            body,
+            re.M,
+        )
+        if not m:
+            fail(f"template datasource {template}-{sig} not found in grafana/datasources.yml")
+        new = m.group(1).replace(f"name: {template}-{sig}", f"name: {tenant}-{sig}")
+        new = re.sub(r"orgId:\s*\d+", f"orgId: {org_id}", new)
+        new = new.replace(f"httpHeaderValue1: {template}", f"httpHeaderValue1: {tenant}")
+        body = body.replace(m.group(1), m.group(1) + new, 1)
+        changed = True
+    return head + body, changed
+
+
+def add_org_mapping(text, tenant, org_id):
+    if f"{tenant}-viewers:" in text:
+        return text, False  # already present: idempotent
+    m = re.search(r'GF_AUTH_GENERIC_OAUTH_ORG_MAPPING:\s*"([^"]*)"', text)
+    if not m:
+        fail(
+            "GF_AUTH_GENERIC_OAUTH_ORG_MAPPING not found in compose.prod.yml - "
+            "wire prod Grafana OIDC first (one-time step, see runbook)."
+        )
+    entries = f"{tenant}-viewers:{org_id}:Viewer, {tenant}-editors:{org_id}:Editor"
+    inner = m.group(1).rstrip()
+    sep = ", " if inner else ""
+    return text.replace(
+        m.group(0),
+        f'GF_AUTH_GENERIC_OAUTH_ORG_MAPPING: "{inner}{sep}{entries}"',
+        1,
+    ), True
+
+
 def main():
     ap = argparse.ArgumentParser(description="Add a new tenant to the platform.")
     ap.add_argument("tenant", help="lowercase id, e.g. onboarding")
@@ -277,6 +337,7 @@ def main():
     ap.add_argument("--grafana-org", default=None)
     ap.add_argument("--environments", default="dev,staging,production")
     ap.add_argument("--port", type=int, default=None, help="internal collector port (default: max+1)")
+    ap.add_argument("--grafana-org-id", type=int, default=None, help="Grafana org id (default: max+1 in grafana/datasources.yml)")
     ap.add_argument("--template", default="digiflow", help="tenant to copy blocks from")
     ap.add_argument("--no-token", action="store_true", help="do not generate a token")
     ap.add_argument("--dry-run", action="store_true", help="print what would change, write nothing")
@@ -303,6 +364,12 @@ def main():
     if not (4300 <= port < 4500):
         fail(f"--port {port} looks wrong; expected 43xx-44xx")
 
+    datasources_text = DATASOURCES.read_text()
+    already_onboarded = re.search(rf"^  - name: {re.escape(tenant)}-metrics\s*$", datasources_text, re.M)
+    org_id = args.grafana_org_id or next_free_org_id(datasources_text)
+    if org_id < 2:
+        fail(f"--grafana-org-id {org_id} looks wrong; org 1 is Main Org, tenants start at 2")
+
     token = None if args.no_token else secrets.token_hex(32)
 
     edits = {}
@@ -313,10 +380,16 @@ def main():
     edits[str(COLLECTOR_CFG)] = add_collector_cfg(collector_text, tenant, port, args.template)
     edits[str(COMPOSE)] = add_compose(COMPOSE.read_text(), tenant, port)
     edits[str(ENV_EXAMPLE)] = add_env_example(ENV_EXAMPLE.read_text(), tenant)
+    edits[str(DATASOURCES)] = add_datasources(datasources_text, tenant, org_id, args.template)
+    compose_text, compose_changed = edits[str(COMPOSE)]
+    mapped_text, mapped_changed = add_org_mapping(compose_text, tenant, org_id)
+    edits[str(COMPOSE)] = (mapped_text, compose_changed or mapped_changed)
 
     changed_files = [f for f, (_, c) in edits.items() if c]
+    if already_onboarded and not args.grafana_org_id:
+        print(f"note: tenant '{tenant}' already has datasources; pass --grafana-org-id to move them")
     if args.dry_run:
-        print(f"tenant={tenant} port={port} token_env={prefix}_OTEL_TOKEN")
+        print(f"tenant={tenant} port={port} grafana_org_id={org_id} token_env={prefix}_OTEL_TOKEN")
         print(f"would change: {', '.join(changed_files) or '(nothing - already present)'}")
         if token:
             print(f"generated token (store in secret manager, NOT in git):\n  {prefix}_OTEL_TOKEN={token}")
@@ -325,7 +398,7 @@ def main():
     for path, (new_text, _) in edits.items():
         Path(path).write_text(new_text)
 
-    print(f"added tenant '{tenant}' on internal port {port}")
+    print(f"added tenant '{tenant}' on internal port {port} (grafana org id {org_id})")
     for f in changed_files:
         print(f"  updated {Path(f).relative_to(ROOT)}")
     if not changed_files:
@@ -334,6 +407,15 @@ def main():
         print(f"\nStore this in the secret manager and hand it to the project team:")
         print(f"  {prefix}_OTEL_TOKEN={token}")
         print(f"Deploy with: {prefix}_OTEL_TOKEN=<token> docker compose -f compose.prod.yml up -d --build")
+    print(
+        f"\nManual - needs the running stack (orgs cannot be file-provisioned):\n"
+        f"  1. Create the Grafana org named '{grafana_org}' (API or admin UI).\n"
+        f"     It MUST get id {org_id}; if it gets another id, re-run with\n"
+        f"     --grafana-org-id <actual-id> to rewrite the files.\n"
+        f"  2. Keycloak: create groups '{tenant}-viewers' and '{tenant}-editors'.\n"
+        f"  3. Redeploy Grafana, have users log out/in (org membership applies at login),\n"
+        f"     then verify Explore in org '{grafana_org}' shows only {tenant}-* sources."
+    )
     print("\nNext: python3 -m pytest gateway/tests/ tests/ -v")
 
 

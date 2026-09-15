@@ -12,9 +12,14 @@ Both variants share the same platform-side steps, automated by
 
 ```bash
 python3 scripts/add-tenant.py <tenant-id> --dry-run   # preview
-python3 scripts/add-tenant.py <tenant-id>             # edit 5 files + print token
+python3 scripts/add-tenant.py <tenant-id>             # edit 7 files + print token
 python3 -m pytest gateway/tests/ tests/ -v
 ```
+
+Plus one manual step the script cannot do (orgs only exist at runtime):
+create the Grafana org against the running Grafana and confirm its id
+matches `--grafana-org-id` (re-run with the actual id if not). Details:
+Variant A §1b.
 
 Trust model (applies to both variants): tenant identity comes **only** from
 the authenticated Bearer credential. Client-supplied `project.id` is routed

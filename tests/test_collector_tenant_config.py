@@ -17,6 +17,7 @@ ROUTING = ROOT / "deploy/collector/tenant-routing.yml"
 TENANTS = ROOT / "projects/tenants.yml"
 ENV_EXAMPLE = ROOT / ".env.example"
 COMPOSE = ROOT / "compose.prod.yml"
+DATASOURCES = ROOT / "grafana/datasources.yml"
 
 # Tenants explicitly covered by name below (gateway upstreams, token envs).
 # The full expected set is derived from the routing registry so that
@@ -138,3 +139,39 @@ def test_compose_wiring():
         assert env[f"{prefix}_UPSTREAM"] == info["collector_upstream"]
     assert env["UBIX_UPSTREAM"] == "http://otel-collector:4319"
     assert env["DIGIFLOW_UPSTREAM"] == "http://otel-collector:4320"
+
+
+def _datasources_by_name():
+    docs = yaml.safe_load(DATASOURCES.read_text())
+    return {d["name"]: d for d in docs.get("datasources", [])}
+
+
+def test_per_tenant_grafana_datasources_isolated(routing):
+    by_name = _datasources_by_name()
+    org_ids = {}
+    for tenant in routing["tenants"]:
+        orgs = set()
+        for sig, dtype in (("metrics", "prometheus"), ("logs", "loki"), ("traces", "tempo")):
+            name = f"{tenant}-{sig}"
+            assert name in by_name, f"missing Grafana datasource {name}"
+            ds = by_name[name]
+            assert ds["type"] == dtype, f"{name} has wrong type"
+            assert ds.get("orgId", 1) != 1, f"{name} must not live in Main Org"
+            assert ds["secureJsonData"]["httpHeaderValue1"] == tenant
+            orgs.add(ds["orgId"])
+        assert len(orgs) == 1, f"{tenant} datasources span multiple orgs: {orgs}"
+        org_ids[tenant] = orgs.pop()
+    assert len(set(org_ids.values())) == len(org_ids), f"tenants share a Grafana org: {org_ids}"
+
+
+def test_org_mapping_covers_tenants(routing):
+    text = COMPOSE.read_text()
+    m = re.search(r'GF_AUTH_GENERIC_OAUTH_ORG_MAPPING:\s*"([^"]*)"', text)
+    if not m:
+        pytest.skip("prod Grafana OIDC not wired yet (no ORG_MAPPING in compose.prod.yml)")
+    mapping = m.group(1)
+    by_name = _datasources_by_name()
+    for tenant in routing["tenants"]:
+        org_id = by_name[f"{tenant}-metrics"]["orgId"]
+        assert f"{tenant}-viewers:{org_id}:Viewer" in mapping, f"{tenant} viewers missing from ORG_MAPPING"
+        assert f"{tenant}-editors:{org_id}:Editor" in mapping, f"{tenant} editors missing from ORG_MAPPING"

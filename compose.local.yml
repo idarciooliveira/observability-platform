@@ -3,8 +3,10 @@
 #   docker compose -f compose.local.yml up -d --build
 #   curl http://localhost:4318/healthz        # gateway
 #   open http://localhost:3000                # grafana (admin/admin)
-# External apps connect over http://host.docker.internal:4318 with their
-# tenant Bearer token (see projects/collector-template.yml + examples/).
+# External apps (other compose networks on the same host) connect over
+# http://host.docker.internal:4318 with their tenant Bearer token
+# (see projects/collector-template.yml + examples/). On Linux without
+# host.docker.internal, use the host bridge/LAN IP with the same port.
 # This file is for LOCAL DEMO ONLY. Production stays on compose.prod.yml.
 services:
   otel-gateway:
@@ -62,9 +64,25 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SERVER_ROOT_URL: http://localhost:3000/
+      GF_USERS_ALLOW_SIGN_UP: "true"
+      GF_USERS_AUTO_ASSIGN_ORG: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_OAUTH_AUTO_LOGIN: "false"
+      GF_AUTH_SIGNOUT_REDIRECT_URL: http://localhost:8090/realms/observability/protocol/openid-connect/logout?client_id=grafana&post_logout_redirect_uri=http://localhost:3000/login
+      GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
+      GF_AUTH_GENERIC_OAUTH_NAME: Keycloak
+      GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP: "true"
+      GF_AUTH_GENERIC_OAUTH_CLIENT_ID: grafana
+      GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: ${KEYCLOAK_GRAFANA_CLIENT_SECRET:?KEYCLOAK_GRAFANA_CLIENT_SECRET is not set}
+      GF_AUTH_GENERIC_OAUTH_SCOPES: openid email profile
+      GF_AUTH_GENERIC_OAUTH_AUTH_URL: http://localhost:8090/realms/observability/protocol/openid-connect/auth
+      GF_AUTH_GENERIC_OAUTH_TOKEN_URL: http://keycloak:8080/realms/observability/protocol/openid-connect/token
+      GF_AUTH_GENERIC_OAUTH_API_URL: http://keycloak:8080/realms/observability/protocol/openid-connect/userinfo
+      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH: "contains(groups[*], 'obs-platform-admins') && 'GrafanaAdmin' || contains(groups[*], 'ubix-editors') && 'Editor' || contains(groups[*], 'digiflow-editors') && 'Editor' || 'Viewer'"
+      GF_AUTH_GENERIC_OAUTH_ALLOW_ASSIGN_GRAFANA_ADMIN: "true"
+      GF_AUTH_GENERIC_OAUTH_ORG_ATTRIBUTE_PATH: groups[]
+      GF_AUTH_GENERIC_OAUTH_ORG_MAPPING: "ubix-viewers:2:Viewer, ubix-editors:2:Editor, digiflow-viewers:3:Viewer, digiflow-editors:3:Editor, obs-platform-admins:1:Admin, obs-platform-admins:2:Admin, obs-platform-admins:3:Admin"
     volumes:
       - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - grafana-data:/var/lib/grafana
@@ -72,6 +90,7 @@ services:
       - mimir
       - loki
       - tempo
+      - keycloak
 
   keycloak:
     image: quay.io/keycloak/keycloak:latest

@@ -11,23 +11,32 @@ Platform side is identical to Variant A — only the project side differs.
 
 ```bash
 python3 scripts/add-tenant.py onboarding --dry-run
-# tenant=onboarding port=4321 token_env=ONBOARDING_OTEL_TOKEN
+# tenant=onboarding port=4321 grafana_org_id=4 token_env=ONBOARDING_OTEL_TOKEN
 # would change: projects/tenants.yml,
 #   deploy/collector/tenant-routing.yml,
-#   deploy/collector/collector-config.yml, compose.prod.yml, .env.example
+#   deploy/collector/collector-config.yml, compose.prod.yml, .env.example,
+#   grafana/datasources.yml
 
 python3 scripts/add-tenant.py onboarding
 # prints: ONBOARDING_OTEL_TOKEN=<hex> -> secret manager, never git
 ```
 
-Resulting PR touches exactly 5 files (port `4321` = next free after
-`4319=ubix`, `4320=digiflow`):
+Resulting PR touches 7 files (port `4321` = next free after
+`4319=ubix`, `4320=digiflow`; Grafana org `4` = next free after
+`1=Main Org.`, `2=ubix`, `3=digiflow`):
 
 - `projects/tenants.yml` — `id: onboarding`, `owner_group: onboarding-editors`, `grafana_org: onboarding`
 - `deploy/collector/tenant-routing.yml` — `token_env: ONBOARDING_OTEL_TOKEN`, `collector_upstream: http://otel-collector:4321`
 - `deploy/collector/collector-config.yml` — `otlp/onboarding` receiver (`0.0.0.0:4321`), `transform/onboarding_identity`, 3 exporters (`X-Scope-OrgID: onboarding`), 3 pipelines
-- `compose.prod.yml` — `GATEWAY_TENANTS: ubix,digiflow,onboarding` + `ONBOARDING_OTEL_TOKEN` / `ONBOARDING_UPSTREAM`
+- `compose.prod.yml` — `GATEWAY_TENANTS: ubix,digiflow,onboarding` + `ONBOARDING_OTEL_TOKEN` / `ONBOARDING_UPSTREAM` + `ORG_MAPPING` entries (`onboarding-viewers:4:Viewer, onboarding-editors:4:Editor`)
 - `.env.example` — `ONBOARDING_OTEL_TOKEN=changeme-onboarding-token`
+- `grafana/datasources.yml` — `onboarding-metrics/logs/traces` with `orgId: 4`
+
+Then the manual Grafana step (orgs cannot be file-provisioned): create the
+`onboarding` org against the running Grafana — it must get id `4`, else
+re-run with `--grafana-org-id <actual-id>` — create the Keycloak
+`onboarding-viewers` / `onboarding-editors` groups, redeploy, and have
+users log out/in. Full checklist: Variant A §1b.
 
 Deploy and test:
 
@@ -84,7 +93,8 @@ curl -s -o /dev/null -w '%{http_code}\n' \
       "scopeLogs":[{"logRecords":[{"body":{"stringValue":"hi"}}]}]}]}'
 
 # Isolation: onboarding credential + project.id=ubix must still land on onboarding
-# (check Grafana org=onboarding; nothing may appear under ubix)
+# (check Grafana org=onboarding: Explore shows only onboarding-*; nothing
+#  may appear under the ubix org, and vice versa)
 # Gateway log: tenant=onboarding ... -> http://otel-collector:4321/v1/logs
 ```
 
