@@ -1,0 +1,96 @@
+# Local platform stack (no demo app).
+# Usage:
+#   docker compose -f compose.local.yml up -d --build
+#   curl http://localhost:4318/healthz        # gateway
+#   open http://localhost:3000                # grafana (admin/admin)
+# External apps connect over http://host.docker.internal:4318 with their
+# tenant Bearer token (see projects/collector-template.yml + examples/).
+# This file is for LOCAL DEMO ONLY. Production stays on compose.prod.yml.
+services:
+  otel-gateway:
+    build: ./gateway
+    restart: unless-stopped
+    ports:
+      - "4318:4318"
+    environment:
+      GATEWAY_TENANTS: ubix,digiflow
+      GATEWAY_LISTEN_PORT: "4318"
+      UBIX_OTEL_TOKEN: ${UBIX_OTEL_TOKEN:?UBIX_OTEL_TOKEN is not set}
+      DIGIFLOW_OTEL_TOKEN: ${DIGIFLOW_OTEL_TOKEN:?DIGIFLOW_OTEL_TOKEN is not set}
+      UBIX_UPSTREAM: http://otel-collector:4319
+      DIGIFLOW_UPSTREAM: http://otel-collector:4320
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./deploy/collector/collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
+
+  mimir:
+    image: grafana/mimir:2.16.0
+    restart: unless-stopped
+    command: ["-config.file=/etc/mimir/mimir.yml", "-target=all"]
+    ports:
+      - "9009:9009"
+    volumes:
+      - ./deploy/local/mimir.yml:/etc/mimir/mimir.yml:ro
+      - mimir-data:/data/mimir
+
+  loki:
+    image: grafana/loki:3.7.6
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki.yml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./deploy/local/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+
+  tempo:
+    image: grafana/tempo:2.8.0
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    ports:
+      - "3200:3200"
+    volumes:
+      - ./deploy/local/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - mimir
+      - loki
+      - tempo
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    restart: unless-stopped
+    command: ["start-dev"]
+    ports:
+      - "8090:8080"
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+
+volumes:
+  mimir-data:
+  loki-data:
+  tempo-data:
+  grafana-data:

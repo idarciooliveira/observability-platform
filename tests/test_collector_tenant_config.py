@@ -18,7 +18,14 @@ TENANTS = ROOT / "projects/tenants.yml"
 ENV_EXAMPLE = ROOT / ".env.example"
 COMPOSE = ROOT / "compose.prod.yml"
 
-EXPECTED_TENANTS = {"ubix", "digiflow"}
+# Tenants explicitly covered by name below (gateway upstreams, token envs).
+# The full expected set is derived from the routing registry so that
+# scripts/add-tenant.py can add tenants without editing this file.
+BASE_TENANTS = {"ubix", "digiflow"}
+
+
+def expected_tenants():
+    return set(yaml.safe_load(ROUTING.read_text())["tenants"])
 
 
 @pytest.fixture(scope="module")
@@ -32,9 +39,11 @@ def routing():
 
 
 def test_tenant_sets_match_everywhere(routing):
-    assert set(routing["tenants"]) == EXPECTED_TENANTS
+    expected = expected_tenants()
+    assert set(routing["tenants"]) == expected
+    assert expected >= BASE_TENANTS
     registry = yaml.safe_load(TENANTS.read_text())
-    assert {p["id"] for p in registry["projects"]} >= EXPECTED_TENANTS
+    assert {p["id"] for p in registry["projects"]} >= expected
 
 
 def test_per_tenant_receivers_match_gateway_upstreams(collector, routing):
@@ -87,21 +96,25 @@ def test_pipelines_wire_receiver_identity_exporters(collector, routing):
 
 
 def test_no_static_cross_tenant_header(collector):
+    expected = expected_tenants()
     text = COLLECTOR_CFG.read_text()
-    for tenant in EXPECTED_TENANTS:
-        other = (EXPECTED_TENANTS - {tenant}).pop()
-        # A ubix pipeline must never carry the digiflow tenant header.
-        for line_no, line in enumerate(text.splitlines(), 1):
-            if f"_{tenant}:" in line or f"/{tenant}" in line:
-                context = "\n".join(text.splitlines()[max(0, line_no - 1):line_no + 6])
-                assert f"X-Scope-OrgID: {other}" not in context
+    for tenant in expected:
+        for other in expected - {tenant}:
+            # A <tenant> pipeline must never carry another tenant's header.
+            for line_no, line in enumerate(text.splitlines(), 1):
+                if f"_{tenant}:" in line or f"/{tenant}" in line:
+                    context = "\n".join(text.splitlines()[max(0, line_no - 1):line_no + 6])
+                    assert f"X-Scope-OrgID: {other}" not in context
 
 
 def test_env_example_has_placeholders_not_secrets():
     text = ENV_EXAMPLE.read_text()
-    for tenant in ("UBIX", "DIGIFLOW"):
-        match = re.search(rf"^{tenant}_OTEL_TOKEN=(.+)$", text, re.M)
-        assert match, f"{tenant}_OTEL_TOKEN missing from .env.example"
+    routing = yaml.safe_load(ROUTING.read_text())
+    prefixes = {info["token_env"].rsplit("_OTEL_TOKEN", 1)[0] for info in routing["tenants"].values()}
+    assert prefixes >= {"UBIX", "DIGIFLOW"}
+    for prefix in prefixes:
+        match = re.search(rf"^{re.escape(prefix)}_OTEL_TOKEN=(.+)$", text, re.M)
+        assert match, f"{prefix}_OTEL_TOKEN missing from .env.example"
         assert "changeme" in match.group(1), "expected a placeholder, not a real secret"
 
 
@@ -113,7 +126,15 @@ def test_compose_wiring():
     assert "4318:4318" in gw["ports"]
     assert services["otel-collector"].get("ports") is None
     env = gw["environment"]
-    assert "UBIX_OTEL_TOKEN" in env and "DIGIFLOW_OTEL_TOKEN" in env
-    assert "UBIX_OTEL_TOKEN:?UBIX_OTEL_TOKEN is not set" in str(env["UBIX_OTEL_TOKEN"])
+    routing = yaml.safe_load(ROUTING.read_text())
+    tenants = list(routing["tenants"])
+    assert tenants[:2] == ["ubix", "digiflow"]
+    assert env["GATEWAY_TENANTS"] == ",".join(tenants)
+    for tenant, info in routing["tenants"].items():
+        token_env = info["token_env"]
+        prefix = token_env.rsplit("_OTEL_TOKEN", 1)[0]
+        assert token_env in env
+        assert f"{token_env}:?{token_env} is not set" in str(env[token_env])
+        assert env[f"{prefix}_UPSTREAM"] == info["collector_upstream"]
     assert env["UBIX_UPSTREAM"] == "http://otel-collector:4319"
     assert env["DIGIFLOW_UPSTREAM"] == "http://otel-collector:4320"

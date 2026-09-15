@@ -165,20 +165,37 @@ Rules:
 
 ## Project onboarding
 
-1. Register ownership and environments in `projects/tenants.yml`.
-2. Create Keycloak groups and Grafana organization.
+Automated with [`scripts/add-tenant.py`](scripts/add-tenant.py) (stdlib only,
+idempotent, preserves comments). Full guides in [`runbook/`](runbook/):
+
+- [Variant A: standard local collector](runbook/onboarding-standard-collector.md)
+  (default — project runs a collector next to its services)
+- [Variant B: external app, direct OTLP](runbook/onboarding-direct-otlp-java.md)
+  (e.g. simple Java app on its own VPS, no local collector)
+
+1. Generate the tenant wiring: `python3 scripts/add-tenant.py <tenant-id> --dry-run`,
+   then `python3 scripts/add-tenant.py <tenant-id>`. This edits `projects/tenants.yml`,
+   `deploy/collector/tenant-routing.yml`, `deploy/collector/collector-config.yml`
+   (receiver on the next `43xx` port, `transform/<id>_identity`, three exporters,
+   three pipelines), `compose.prod.yml` (`GATEWAY_TENANTS`, `<ID>_OTEL_TOKEN`,
+   `<ID>_UPSTREAM`), and `.env.example`. Review the diff, run
+   `python3 -m pytest gateway/tests/ tests/ -v`, redeploy.
+2. Register ownership and environments in `projects/tenants.yml` (done by the script).
+   Create Keycloak groups and Grafana organization (manual, not in this repo).
 3. Create the project machine credential and store it in the secret manager:
-   - generate with `openssl rand -hex 32`
+   - the script prints a fresh token (`secrets.token_hex(32)`, equivalent to
+     `openssl rand -hex 32`); or generate with `openssl rand -hex 32`
    - export as `<PROJECT>_OTEL_TOKEN` (e.g. `UBIX_OTEL_TOKEN`)
    - hand the token to the project team over a secure channel, never in git
    - the gateway refuses to start if any tenant in
      `deploy/collector/tenant-routing.yml` has no token configured
-4. Issue collector configuration from `projects/collector-template.yml`:
-   1. Choose runtime collector template
-   2. Set project credential (`PROJECT_OTEL_TOKEN`)
-   3. Set `service.name` (plus version/environment)
-   4. Point collector to `ingest.observability.example.com` (OTLP/HTTP)
-   5. Start application
+4. Issue telemetry configuration (pick one runbook variant):
+   1. Variant A: copy `projects/collector-template.yml` to the project repo,
+      set `PROJECT_OTEL_TOKEN` + `service.name` (plus version/environment),
+      point at `ingest.observability.example.com` (OTLP/HTTP), start.
+   2. Variant B: configure the app/SDK to send OTLP/HTTP directly to
+      `ingest.observability.example.com` with
+      `Authorization: Bearer <project-token>` on every request.
 5. Validate metrics, logs, and traces from one service.
 6. Test RabbitMQ, Camunda, and Angular traces.
 7. Test quotas, rotation, PII scrubbing, and isolation:
@@ -203,6 +220,8 @@ The platform must fail visibly. Silent telemetry loss is an incident.
 
 | File | Purpose |
 |------|---------|
+| [`scripts/add-tenant.py`](scripts/add-tenant.py) | Automate tenant onboarding (edits the 5 registry/config files + prints token) |
+| [`runbook/`](runbook/) | Onboarding runbooks: Variant A (local collector), Variant B (direct OTLP, external Java) |
 | [`projects/collector-template.yml`](projects/collector-template.yml) | Copy-paste local collector config for projects |
 | [`projects/tenants.yml`](projects/tenants.yml) | Tenant registry (source of truth for onboarding) |
 | [`deploy/collector/tenant-routing.yml`](deploy/collector/tenant-routing.yml) | Credential → project routing registry (no secrets) |
