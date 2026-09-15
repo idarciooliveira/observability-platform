@@ -1,22 +1,22 @@
 apiVersion: 1
 
-# Stale copies from the single-org era. Main Org (1) keeps no datasources;
-# each tenant org owns only its own (ubix=2, digiflow=3).
+# Platform Org (1) owns platform telemetry. Project orgs own only their own
+# tenant telemetry and never receive the platform datasource.
 deleteDatasources:
-  - name: ubix-metrics
-    orgId: 1
-  - name: ubix-logs
-    orgId: 1
-  - name: ubix-traces
-    orgId: 1
-  - name: digiflow-metrics
-    orgId: 1
-  - name: digiflow-logs
-    orgId: 1
-  - name: digiflow-traces
+  - name: platform-metrics
     orgId: 1
 
 datasources:
+  - name: platform-metrics
+    uid: platform-metrics
+    type: prometheus
+    orgId: 1
+    url: http://mimir:9009/prometheus
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: platform
+
   - name: ubix-metrics
     type: prometheus
     orgId: 2

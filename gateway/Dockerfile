@@ -10,6 +10,10 @@ RUN useradd --create-home --uid 10001 gateway \
 USER 10001
 EXPOSE 4318
 
+# Prometheus metrics are served on a private container port. Compose does not
+# publish this port to external clients.
+EXPOSE 9464
+
 ENV GATEWAY_LISTEN_PORT=4318 \
     GATEWAY_TENANTS=ubix,digiflow \
     PYTHONUNBUFFERED=1

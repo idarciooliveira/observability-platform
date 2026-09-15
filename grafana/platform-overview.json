@@ -1,17 +1,70 @@
 {
-  "title": "Platform overview",
+  "annotations": {"list": []},
+  "editable": false,
   "folder": "Platform",
   "panels": [
-    "ingested telemetry rate",
-    "collector export failures",
-    "dropped spans and logs",
-    "query latency",
-    "storage capacity",
-    "tenant quota usage",
-    "OTLP request rate, errors, and latency",
-    "collector queue size and resource usage",
-    "tenant ingestion and dropped telemetry",
-    "gateway availability"
+    {
+      "datasource": {"type": "prometheus", "uid": "platform-metrics"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "title": "Gateway request rate",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (path) (rate(gateway_http_requests_total[5m]))", "legendFormat": "{{path}}", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "platform-metrics"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "title": "Gateway availability",
+      "type": "timeseries",
+      "targets": [{"expr": "up{job=\"otel-gateway\"}", "legendFormat": "gateway", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "platform-metrics"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 3,
+      "title": "Authentication failures",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (path) (rate(gateway_auth_failures_total[5m]))", "legendFormat": "{{path}}", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "platform-metrics"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 4,
+      "title": "Gateway p95 latency",
+      "type": "timeseries",
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, path) (rate(gateway_request_duration_seconds_bucket[5m])))", "legendFormat": "{{path}}", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "platform-metrics"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "id": 5,
+      "title": "Upstream collector errors",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (tenant) (rate(gateway_upstream_errors_total[5m]))", "legendFormat": "{{tenant}}", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "platform-metrics"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "id": 6,
+      "title": "Telemetry bytes received",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (path) (rate(gateway_request_body_bytes_total[5m]))", "legendFormat": "{{path}}", "refId": "A"}]
+    }
   ],
-  "datasource": "platform-federated"
+  "schemaVersion": 39,
+  "tags": ["platform", "gateway"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Platform overview",
+  "uid": "platform-overview",
+  "version": 1
 }

@@ -34,6 +34,8 @@ import hmac
 import logging
 import os
 import sys
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -52,6 +54,89 @@ MAX_BODY_BYTES = 32 * 1024 * 1024
 UPSTREAM_TIMEOUT_S = 30
 
 TENANT_HEADER = "X-Scope-OrgID"
+
+
+class Metrics:
+    """Small Prometheus exposition implementation with no dependencies."""
+
+    HISTOGRAM_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10)
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.requests = {}
+        self.durations = {}
+        self.body_bytes = {}
+        self.auth_failures = {}
+        self.upstream_requests = {}
+        self.upstream_errors = {}
+
+    @staticmethod
+    def _inc(mapping, key, value=1):
+        mapping[key] = mapping.get(key, 0) + value
+
+    def request(self, method, path, status, duration, body_size=0):
+        key = (method, path, str(status))
+        with self._lock:
+            self._inc(self.requests, key)
+            self._inc(self.body_bytes, (path,), body_size)
+            buckets, total, count = self.durations.setdefault(
+                (method, path), ([0] * len(self.HISTOGRAM_BUCKETS), 0.0, 0)
+            )
+            for index, boundary in enumerate(self.HISTOGRAM_BUCKETS):
+                if duration <= boundary:
+                    buckets[index] += 1
+            self.durations[(method, path)] = (buckets, total + duration, count + 1)
+
+    def auth_failure(self, path):
+        with self._lock:
+            self._inc(self.auth_failures, (path,))
+
+    def upstream_request(self, tenant, status):
+        with self._lock:
+            self._inc(self.upstream_requests, (tenant, str(status)))
+
+    def upstream_error(self, tenant):
+        with self._lock:
+            self._inc(self.upstream_errors, (tenant,))
+
+    @staticmethod
+    def _labels(**labels):
+        return "{" + ",".join(f'{key}="{str(value).replace(chr(92), chr(92) * 2).replace(chr(34), chr(92) + chr(34))}"' for key, value in labels.items()) + "}"
+
+    def render(self):
+        lines = [
+            "# HELP gateway_http_requests_total HTTP requests handled by the gateway.",
+            "# TYPE gateway_http_requests_total counter",
+            "# HELP gateway_request_duration_seconds Gateway request duration.",
+            "# TYPE gateway_request_duration_seconds histogram",
+            "# HELP gateway_request_body_bytes_total Bytes received by the gateway.",
+            "# TYPE gateway_request_body_bytes_total counter",
+            "# HELP gateway_auth_failures_total Requests rejected for invalid credentials.",
+            "# TYPE gateway_auth_failures_total counter",
+            "# HELP gateway_upstream_requests_total Requests sent to tenant collectors.",
+            "# TYPE gateway_upstream_requests_total counter",
+            "# HELP gateway_upstream_errors_total Requests that could not reach a tenant collector.",
+            "# TYPE gateway_upstream_errors_total counter",
+        ]
+        with self._lock:
+            for (method, path, status), value in sorted(self.requests.items()):
+                lines.append(f"gateway_http_requests_total{self._labels(method=method, path=path, status=status)} {value}")
+            for (method, path), (buckets, total, count) in sorted(self.durations.items()):
+                running = 0
+                for index, boundary in enumerate(self.HISTOGRAM_BUCKETS):
+                    lines.append(f"gateway_request_duration_seconds_bucket{self._labels(method=method, path=path, le=boundary)} {buckets[index]}")
+                lines.append(f"gateway_request_duration_seconds_bucket{self._labels(method=method, path=path, le='+Inf')} {count}")
+                lines.append(f"gateway_request_duration_seconds_sum{self._labels(method=method, path=path)} {total}")
+                lines.append(f"gateway_request_duration_seconds_count{self._labels(method=method, path=path)} {count}")
+            for (path,), value in sorted(self.body_bytes.items()):
+                lines.append(f"gateway_request_body_bytes_total{self._labels(path=path)} {value}")
+            for (path,), value in sorted(self.auth_failures.items()):
+                lines.append(f"gateway_auth_failures_total{self._labels(path=path)} {value}")
+            for (tenant, status), value in sorted(self.upstream_requests.items()):
+                lines.append(f"gateway_upstream_requests_total{self._labels(tenant=tenant, status=status)} {value}")
+            for (tenant,), value in sorted(self.upstream_errors.items()):
+                lines.append(f"gateway_upstream_errors_total{self._labels(tenant=tenant)} {value}")
+        return ("\n".join(lines) + "\n").encode()
 
 
 def load_config():
@@ -90,7 +175,8 @@ def load_config():
     return routing, port
 
 
-ROUTING, LISTEN_PORT = None, None  # set in main(); read by the handler
+ROUTING, LISTEN_PORT, METRICS_PORT = None, None, None  # set in main(); read by handlers
+METRICS = Metrics()
 
 
 def authenticate(authorization):
@@ -109,6 +195,10 @@ def authenticate(authorization):
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "otel-gateway/1"
+
+    def send_response(self, code, message=None):
+        self._metric_status = code
+        super().send_response(code, message)
 
     def log_message(self, fmt, *args):  # route through logging, never log tokens
         LOG.info("%s %s", self.address_string(), fmt % args)
@@ -129,6 +219,18 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "not found\n")
 
     def do_POST(self):
+        started = time.monotonic()
+        self._metric_status = 500
+        self._metric_body_size = 0
+        try:
+            self._do_POST()
+        finally:
+            METRICS.request(
+                "POST", self.path, self._metric_status,
+                time.monotonic() - started, self._metric_body_size,
+            )
+
+    def _do_POST(self):
         if self.path not in SIGNALS:
             self._send(404, "unknown OTLP path; use /v1/traces, /v1/metrics or /v1/logs\n")
             return
@@ -140,6 +242,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/plain")
             self.send_header("Content-Length", "0")
             self.end_headers()
+            METRICS.auth_failure(self.path)
             LOG.warning("rejected unauthenticated %s from %s", self.path, self.address_string())
             return
 
@@ -152,6 +255,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(413, "payload too large\n")
             return
         body = self.rfile.read(length) if length else b""
+        self._metric_body_size = len(body)
 
         tenant = entry["tenant"]
         url = entry["upstream"] + self.path
@@ -169,6 +273,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             with urlopen(upstream, timeout=UPSTREAM_TIMEOUT_S) as resp:
                 resp_body = resp.read()
+                METRICS.upstream_request(tenant, resp.status)
                 self.send_response(resp.status)
                 self.send_header("Content-Type", resp.headers.get("Content-Type", "application/json"))
                 self.send_header("Content-Length", str(len(resp_body)))
@@ -177,6 +282,7 @@ class Handler(BaseHTTPRequestHandler):
             LOG.info("tenant=%s %s %d bytes -> %s", tenant, self.path, len(body), url)
         except HTTPError as exc:
             err_body = exc.read()
+            METRICS.upstream_request(tenant, exc.code)
             self.send_response(exc.code)
             self.send_header("Content-Type", exc.headers.get("Content-Type", "text/plain"))
             self.send_header("Content-Length", str(len(err_body)))
@@ -184,6 +290,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(err_body)
             LOG.warning("tenant=%s %s upstream=%s", tenant, self.path, exc.code)
         except (URLError, OSError) as exc:
+            METRICS.upstream_error(tenant)
             LOG.error("tenant=%s %s upstream unreachable: %s", tenant, self.path, exc)
             self._send(502, "upstream collector unavailable\n")
 
@@ -198,21 +305,44 @@ class Handler(BaseHTTPRequestHandler):
         self._send(405, "method not allowed\n")
 
 
+class MetricsHandler(BaseHTTPRequestHandler):
+    server_version = "otel-gateway-metrics/1"
+
+    def do_GET(self):
+        if self.path != "/metrics":
+            self.send_error(404)
+            return
+        body = METRICS.render()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, fmt, *args):
+        return
+
+
 def main():
-    global ROUTING, LISTEN_PORT
+    global ROUTING, LISTEN_PORT, METRICS_PORT
     logging.basicConfig(
         level=os.environ.get("GATEWAY_LOG_LEVEL", "INFO"),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
         stream=sys.stdout,
     )
     ROUTING, LISTEN_PORT = load_config()
+    METRICS_PORT = int(os.environ.get("GATEWAY_METRICS_PORT", "9464"))
     tenants = sorted(e["tenant"] for e in ROUTING.values())
     LOG.info("starting: port=%d tenants=%s", LISTEN_PORT, ",".join(tenants))
     server = ThreadingHTTPServer(("0.0.0.0", LISTEN_PORT), Handler)
+    metrics_server = ThreadingHTTPServer(("0.0.0.0", METRICS_PORT), MetricsHandler)
+    metrics_thread = threading.Thread(target=metrics_server.serve_forever, daemon=True)
+    metrics_thread.start()
+    LOG.info("metrics: private port=%d", METRICS_PORT)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        pass
+        metrics_server.shutdown()
 
 
 if __name__ == "__main__":

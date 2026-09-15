@@ -17,6 +17,7 @@ services:
     environment:
       GATEWAY_TENANTS: ubix,digiflow
       GATEWAY_LISTEN_PORT: "4318"
+      GATEWAY_METRICS_PORT: "9464"
       UBIX_OTEL_TOKEN: ${UBIX_OTEL_TOKEN:?UBIX_OTEL_TOKEN is not set}
       DIGIFLOW_OTEL_TOKEN: ${DIGIFLOW_OTEL_TOKEN:?DIGIFLOW_OTEL_TOKEN is not set}
       UBIX_UPSTREAM: http://otel-collector:4319
@@ -24,6 +25,19 @@ services:
     depends_on:
       otel-collector:
         condition: service_started
+
+  platform-prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./deploy/platform/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - platform-prometheus-data:/prometheus
+    depends_on:
+      - otel-gateway
+      - mimir
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.135.0
@@ -85,6 +99,8 @@ services:
       GF_AUTH_GENERIC_OAUTH_ORG_MAPPING: "ubix-viewers:2:Viewer, ubix-editors:2:Editor, digiflow-viewers:3:Viewer, digiflow-editors:3:Editor, obs-platform-admins:1:Admin, obs-platform-admins:2:Admin, obs-platform-admins:3:Admin"
     volumes:
       - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./grafana/platform-overview.json:/var/lib/grafana/dashboards/platform-overview.json:ro
       - grafana-data:/var/lib/grafana
     depends_on:
       - mimir
@@ -107,3 +123,4 @@ volumes:
   loki-data:
   tempo-data:
   grafana-data:
+  platform-prometheus-data:
