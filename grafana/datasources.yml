@@ -11,7 +11,41 @@ datasources:
   - name: ubix-logs
     type: loki
     url: http://loki:3100
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
     secureJsonData:
       httpHeaderValue1: ubix
+
+  - name: digiflow-metrics
+    type: prometheus
+    url: http://mimir:9009/prometheus
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: digiflow
+
+  - name: digiflow-logs
+    type: loki
+    url: http://loki:3100
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: digiflow
+
+  - name: ubix-traces
+    type: tempo
+    url: http://tempo:3200
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: ubix
+
+  - name: digiflow-traces
+    type: tempo
+    url: http://tempo:3200
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: digiflow
 
 # Repeat per project. Never expose an unrestricted shared datasource.

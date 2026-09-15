@@ -1,25 +1,189 @@
+# Central OpenTelemetry Collector (internal).
+#
+# Trust model: this collector NEVER faces projects directly. The only writer
+# is otel-gateway, which authenticates the project Bearer token and routes
+# each tenant to its own private OTLP receiver below. Because routing happens
+# before any telemetry is inspected, a spoofed `project.id` resource
+# attribute can never cross tenants; the per-tenant `transform/*_identity`
+# processors then overwrite it with the authenticated value as defense in
+# depth, and the per-tenant exporters attach the matching static
+# `X-Scope-OrgID` header (Mimir, Loki and Tempo all use X-Scope-OrgID for
+# multitenancy when it is enabled server-side).
+#
+# Adding a project: add otlp/<id> receiver on the next 43xx port, a
+# transform/<id>_identity processor, three otlphttp exporters with
+# X-Scope-OrgID=<id>, three pipelines, and the matching gateway env vars
+# (see deploy/collector/tenant-routing.yml).
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
 receivers:
-  otlp:
+  # Private per-tenant ingress. Bound to the compose network only; the
+  # gateway is the sole client. HTTP only (gateway proxies OTLP/HTTP).
+  otlp/ubix:
     protocols:
-      grpc: { endpoint: 0.0.0.0:4317 }
-      http: { endpoint: 0.0.0.0:4318 }
+      http:
+        endpoint: 0.0.0.0:4319
+        include_metadata: true
+  otlp/digiflow:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4320
+        include_metadata: true
 
 processors:
-  memory_limiter: { limit_mib: 2048 }
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 15
+
   batch: {}
-  transform/project-identity:
-    # Set project.id from authenticated connection context.
-  filter/pii:
-    # Replace secrets, tokens, account numbers, and payloads.
+
+  # Trusted identity: overwrite any client-supplied project.id with the
+  # tenant that owns this pipeline. `set` replaces a spoofed value and
+  # creates the attribute when absent, so both values can never coexist.
+  transform/ubix_identity:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["project.id"], "ubix")
+    metric_statements:
+      - context: resource
+        statements:
+          - set(attributes["project.id"], "ubix")
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["project.id"], "ubix")
+
+  transform/digiflow_identity:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["project.id"], "digiflow")
+    metric_statements:
+      - context: resource
+        statements:
+          - set(attributes["project.id"], "digiflow")
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["project.id"], "digiflow")
+
+  # Minimal secret redaction on resource attributes. Full PII scrubbing of
+  # span/log bodies remains follow-up work (see runbooks/collector-outage.md).
+  transform/redact_pii:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["password"], "[REDACTED]") where attributes["password"] != nil
+          - set(attributes["passwd"], "[REDACTED]") where attributes["passwd"] != nil
+          - set(attributes["secret"], "[REDACTED]") where attributes["secret"] != nil
+          - set(attributes["api_key"], "[REDACTED]") where attributes["api_key"] != nil
+          - set(attributes["client_secret"], "[REDACTED]") where attributes["client_secret"] != nil
+          - set(attributes["auth_token"], "[REDACTED]") where attributes["auth_token"] != nil
+          - set(attributes["authorization"], "[REDACTED]") where attributes["authorization"] != nil
+    metric_statements:
+      - context: resource
+        statements:
+          - set(attributes["password"], "[REDACTED]") where attributes["password"] != nil
+          - set(attributes["passwd"], "[REDACTED]") where attributes["passwd"] != nil
+          - set(attributes["secret"], "[REDACTED]") where attributes["secret"] != nil
+          - set(attributes["api_key"], "[REDACTED]") where attributes["api_key"] != nil
+          - set(attributes["client_secret"], "[REDACTED]") where attributes["client_secret"] != nil
+          - set(attributes["auth_token"], "[REDACTED]") where attributes["auth_token"] != nil
+          - set(attributes["authorization"], "[REDACTED]") where attributes["authorization"] != nil
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["password"], "[REDACTED]") where attributes["password"] != nil
+          - set(attributes["passwd"], "[REDACTED]") where attributes["passwd"] != nil
+          - set(attributes["secret"], "[REDACTED]") where attributes["secret"] != nil
+          - set(attributes["api_key"], "[REDACTED]") where attributes["api_key"] != nil
+          - set(attributes["client_secret"], "[REDACTED]") where attributes["client_secret"] != nil
+          - set(attributes["auth_token"], "[REDACTED]") where attributes["auth_token"] != nil
+          - set(attributes["authorization"], "[REDACTED]") where attributes["authorization"] != nil
 
 exporters:
-  otlphttp/internal-collector:
-    endpoint: https://otel-collector.internal:4318
+  debug:
+    verbosity: basic
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+  # Mimir OTLP ingestion: http://mimir:9009/otlp (X-Scope-OrgID = tenant).
+  otlphttp/mimir_ubix:
+    endpoint: http://mimir:9009/otlp
+    headers:
+      X-Scope-OrgID: ubix
+    retry_on_failure: { enabled: true }
+    sending_queue: { enabled: true, queue_size: 10000 }
+  otlphttp/mimir_digiflow:
+    endpoint: http://mimir:9009/otlp
+    headers:
+      X-Scope-OrgID: digiflow
+    retry_on_failure: { enabled: true }
+    sending_queue: { enabled: true, queue_size: 10000 }
+
+  # Loki OTLP ingestion (available since Loki 2.9): X-Scope-OrgID = tenant.
+  otlphttp/loki_ubix:
+    endpoint: http://loki:3100/otlp
+    headers:
+      X-Scope-OrgID: ubix
+    retry_on_failure: { enabled: true }
+    sending_queue: { enabled: true, queue_size: 10000 }
+  otlphttp/loki_digiflow:
+    endpoint: http://loki:3100/otlp
+    headers:
+      X-Scope-OrgID: digiflow
+    retry_on_failure: { enabled: true }
+    sending_queue: { enabled: true, queue_size: 10000 }
+
+  # Tempo OTLP ingestion with multitenancy_enabled: X-Scope-OrgID = tenant.
+  otlphttp/tempo_ubix:
+    endpoint: http://tempo:4318
+    headers:
+      X-Scope-OrgID: ubix
+    retry_on_failure: { enabled: true }
+    sending_queue: { enabled: true, queue_size: 10000 }
+  otlphttp/tempo_digiflow:
+    endpoint: http://tempo:4318
+    headers:
+      X-Scope-OrgID: digiflow
     retry_on_failure: { enabled: true }
     sending_queue: { enabled: true, queue_size: 10000 }
 
 service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      level: INFO
   pipelines:
-    traces: [receivers, processors, exporters]
-    metrics: [receivers, processors, exporters]
-    logs: [receivers, processors, exporters]
+    traces/ubix:
+      receivers: [otlp/ubix]
+      processors: [memory_limiter, transform/ubix_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/tempo_ubix, debug]
+    metrics/ubix:
+      receivers: [otlp/ubix]
+      processors: [memory_limiter, transform/ubix_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/mimir_ubix, debug]
+    logs/ubix:
+      receivers: [otlp/ubix]
+      processors: [memory_limiter, transform/ubix_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/loki_ubix, debug]
+    traces/digiflow:
+      receivers: [otlp/digiflow]
+      processors: [memory_limiter, transform/digiflow_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/tempo_digiflow, debug]
+    metrics/digiflow:
+      receivers: [otlp/digiflow]
+      processors: [memory_limiter, transform/digiflow_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/mimir_digiflow, debug]
+    logs/digiflow:
+      receivers: [otlp/digiflow]
+      processors: [memory_limiter, transform/digiflow_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/loki_digiflow, debug]

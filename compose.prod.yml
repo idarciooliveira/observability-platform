@@ -1,12 +1,50 @@
 services:
+  # Trust boundary: authenticates project Bearer tokens, maps each credential
+  # to its tenant, and proxies OTLP/HTTP to the tenant's private pipeline.
+  # This is the ONLY service that publishes the ingestion ports.
+  otel-gateway:
+    build: ./gateway
+    restart: unless-stopped
+    ports:
+      - "4318:4318"
+    environment:
+      GATEWAY_TENANTS: ubix,digiflow
+      GATEWAY_LISTEN_PORT: "4318"
+      UBIX_OTEL_TOKEN: ${UBIX_OTEL_TOKEN:?UBIX_OTEL_TOKEN is not set}
+      DIGIFLOW_OTEL_TOKEN: ${DIGIFLOW_OTEL_TOKEN:?DIGIFLOW_OTEL_TOKEN is not set}
+      UBIX_UPSTREAM: http://otel-collector:4319
+      DIGIFLOW_UPSTREAM: http://otel-collector:4320
+    depends_on:
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4318/healthz', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # Internal collector: per-tenant pipelines only. No published ports;
+  # reachable solely via the compose network (otel-gateway -> otel-collector).
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.135.0
     restart: unless-stopped
-    ports:
-      - "4317:4317"
-      - "4318:4318"
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
     volumes:
       - ./deploy/collector/collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      mimir:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:13133/"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 
   grafana:
     image: grafana/grafana:12.1.0

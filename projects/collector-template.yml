@@ -1,0 +1,59 @@
+# Local OpenTelemetry Collector template for platform projects.
+#
+# Onboarding:
+#   1. Copy this file to your service repository.
+#   2. Set PROJECT_OTEL_TOKEN to the token issued by the platform team.
+#   3. Set service.name (and service.version / deployment.environment).
+#   4. Point the exporter at https://ingest.observability.example.com
+#      (OTLP/HTTP :4318 in this Phase 1 deployment).
+#   5. Start the application and verify one metric, log and trace arrive.
+#
+# Rules:
+# - Use the otlphttp exporter (Phase 1 gateway serves OTLP/HTTP only).
+# - Send Authorization: Bearer ${PROJECT_OTEL_TOKEN} on every request.
+# - Do NOT set project.id yourself: the platform derives it from your
+#   credential and overwrites any client-supplied value.
+# - Do NOT set X-Scope-OrgID: the gateway sets it from your credential.
+
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+
+processors:
+  batch: {}
+  resource:
+    attributes:
+      - key: service.name
+        value: ${SERVICE_NAME:?set service.name for your service}
+        action: upsert
+      - key: service.version
+        value: ${SERVICE_VERSION:-unknown}
+        action: upsert
+      - key: deployment.environment
+        value: ${DEPLOYMENT_ENVIRONMENT:-production}
+        action: upsert
+
+exporters:
+  otlphttp/platform:
+    endpoint: ${PLATFORM_INGEST_URL:-https://ingest.observability.example.com}
+    headers:
+      Authorization: "Bearer ${PROJECT_OTEL_TOKEN:?set the project token issued by the platform team}"
+    retry_on_failure: { enabled: true }
+    sending_queue: { enabled: true, queue_size: 5000 }
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlphttp/platform]
+    metrics:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlphttp/platform]
+    logs:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlphttp/platform]

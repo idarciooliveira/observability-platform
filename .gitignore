@@ -1,0 +1,6 @@
+# Local secrets and generated artifacts. Never commit real credentials.
+.env
+*.pem
+*.key
+.pytest_cache/
+__pycache__/

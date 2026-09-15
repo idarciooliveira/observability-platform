@@ -1,14 +1,33 @@
+# Tenant routing registry: source of truth for credential -> project mapping.
+#
+# SECURITY RULES (enforced, not advisory):
+# - Tenant identity comes ONLY from the authenticated Bearer credential.
+# - The client-supplied `project.id` resource attribute is never trusted:
+#   the gateway routes the request to the credential owner's private
+#   pipeline, whose transform processor overwrites `project.id`.
+# - Unknown credentials are rejected with 401 and never reach any backend.
+#
+# NO SECRETS IN THIS FILE. Tokens live in the environment / secret manager:
+#   UBIX_OTEL_TOKEN, DIGIFLOW_OTEL_TOKEN (see .env.example).
+# The gateway refuses to start if any tenant below has no token configured.
+
+gateway:
+  image: otel-gateway (built from ./gateway)
+  listen: 0.0.0.0:4318
+  tenants_env: GATEWAY_TENANTS  # "ubix,digiflow"
+
 tenants:
   ubix:
-    credential: secret/ubix/otel
-    storage_tenant: ubix
+    token_env: UBIX_OTEL_TOKEN
+    collector_receiver: otlp/ubix
+    collector_upstream: http://otel-collector:4319
+    storage_tenant: ubix # sent as X-Scope-OrgID to Mimir, Loki and Tempo
     max_series: 250000
     log_rate_mb: 20
   digiflow:
-    credential: secret/digiflow/otel
-    storage_tenant: digiflow
+    token_env: DIGIFLOW_OTEL_TOKEN
+    collector_receiver: otlp/digiflow
+    collector_upstream: http://otel-collector:4320
+    storage_tenant: digiflow # sent as X-Scope-OrgID to Mimir, Loki and Tempo
     max_series: 250000
     log_rate_mb: 20
-
-# Unknown credentials are rejected.
-# The gateway overwrites project.id.
