@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Observability platform foundation · v2</title>
+  <title>Observability platform foundation · v3</title>
   <style>
     :root {
       --bg:#f4f6f8; --panel:#fff; --line:#d9dfe6; --text:#1f2933;
@@ -95,7 +95,7 @@
         <h1>Observability platform repository</h1>
         <p>A simple production foundation for five isolated internal projects, designed to scale later.</p>
       </div>
-      <span class="badge">prototype v2 · single-node production</span>
+      <span class="badge">prototype v3 · single-node production</span>
     </div>
   </header>
 
@@ -106,9 +106,9 @@
         <p>The platform team owns shared ingestion, storage, identity, and access. Project teams instrument applications and run local collectors. Phase 1 uses one deployment host with multi-tenancy by design.</p>
         <div class="flow">
           <div class="flow-step"><strong>Project servers</strong><span>Java, Angular, Camunda, RabbitMQ</span></div>
-          <div class="flow-step"><strong>Local collectors</strong><span>Batch, retry, scrub, enrich</span></div>
-          <div class="flow-step"><strong>Central collector</strong><span>TLS, auth, tenant routing, PII filtering</span></div>
-          <div class="flow-step"><strong>LGTM + Grafana</strong><span>Mimir, Loki, Tempo, Keycloak</span></div>
+          <div class="flow-step"><strong>Local collectors</strong><span>otlphttp + Bearer token, template in projects/</span></div>
+          <div class="flow-step"><strong>Central gateway</strong><span>Authenticate, credential&rarr;tenant, reject unknown</span></div>
+          <div class="flow-step"><strong>Tenant pipelines + LGTM</strong><span>Overwrite project.id, X-Scope-OrgID to Mimir/Loki/Tempo, Grafana</span></div>
         </div>
       </div>
       <div class="panel panel-body">
@@ -126,55 +126,57 @@
       <aside class="tree">
         <div class="panel-title"><span>Repository</span><span>Phase 1</span></div>
         <div class="tree-content">
-          <div class="folder">observability-platform/</div>
-          <div class="nested">
-            <button class="file active" data-file="compose" type="button"><span class="kind">YML</span>compose.phase1.yml</button>
-            <button class="file" data-file="env" type="button"><span class="kind">ENV</span>.env.example</button>
-            <div class="folder">deploy/</div>
+            <div class="folder">observability-platform/</div>
             <div class="nested">
-              <div class="folder">collector/</div>
-              <div class="nested">
-                <button class="file" data-file="gateway" type="button"><span class="kind">YML</span>collector-config.yml</button>
-                <button class="file" data-file="routing" type="button"><span class="kind">YML</span>tenant-routing.yml</button>
-              </div>
-              <div class="folder">storage/</div>
-              <div class="nested">
-                <button class="file" data-file="storage" type="button"><span class="kind">YML</span>storage-values.yml</button>
-                <button class="file" data-file="object" type="button"><span class="kind">YML</span>object-storage.yml</button>
-              </div>
-              <div class="folder">tls/</div>
-              <div class="nested">
-                <button class="file" data-file="tls" type="button"><span class="kind">YML</span>cert-manager.yml</button>
-              </div>
+            <button class="file active" data-file="readme" type="button"><span class="kind">MD</span>README.md</button>
+            <button class="file" data-file="compose" type="button"><span class="kind">YML</span>compose.prod.yml</button>
+            <button class="file" data-file="env" type="button"><span class="kind">ENV</span>.env.example</button>
+            <div class="folder">gateway/</div>
+            <div class="nested">
+            <button class="file" data-file="gatewaypy" type="button"><span class="kind">PY</span>gateway.py</button>
+            <button class="file" data-file="dockerfile" type="button"><span class="kind">DOCKER</span>Dockerfile</button>
+            <button class="file" data-file="gatewaytests" type="button"><span class="kind">PY</span>test_tenant_isolation.py</button>
+            </div>
+            <div class="folder">deploy/collector/</div>
+            <div class="nested">
+            <button class="file" data-file="collector" type="button"><span class="kind">YML</span>collector-config.yml</button>
+            <button class="file" data-file="routing" type="button"><span class="kind">YML</span>tenant-routing.yml</button>
+            </div>
+            <div class="folder">deploy/storage/</div>
+            <div class="nested">
+            <button class="file" data-file="storage" type="button"><span class="kind">YML</span>storage-values.yml</button>
+            <button class="file" data-file="object" type="button"><span class="kind">YML</span>object-storage.yml</button>
+            </div>
+            <div class="folder">deploy/tls/</div>
+            <div class="nested">
+            <button class="file" data-file="tls" type="button"><span class="kind">YML</span>cert-manager.yml</button>
             </div>
             <div class="folder">identity/</div>
             <div class="nested">
-              <button class="file" data-file="keycloak" type="button"><span class="kind">JSON</span>keycloak-realm.json</button>
-              <button class="file" data-file="rbac" type="button"><span class="kind">YML</span>grafana-rbac.yml</button>
+            <button class="file" data-file="keycloak" type="button"><span class="kind">JSON</span>keycloak-realm.json</button>
+            <button class="file" data-file="rbac" type="button"><span class="kind">YML</span>grafana-rbac.yml</button>
             </div>
             <div class="folder">grafana/</div>
             <div class="nested">
-              <button class="file" data-file="datasources" type="button"><span class="kind">YML</span>datasources.yml</button>
-              <button class="file" data-file="dashboard" type="button"><span class="kind">JSON</span>platform-overview.json</button>
-              <button class="file" data-file="alerts" type="button"><span class="kind">YML</span>platform-alerts.yml</button>
+            <button class="file" data-file="datasources" type="button"><span class="kind">YML</span>datasources.yml</button>
+            <button class="file" data-file="dashboard" type="button"><span class="kind">JSON</span>platform-overview.json</button>
+            <button class="file" data-file="alerts" type="button"><span class="kind">YML</span>platform-alerts.yml</button>
             </div>
             <div class="folder">projects/</div>
             <div class="nested">
-              <button class="file" data-file="projects" type="button"><span class="kind">YML</span>tenants.yml</button>
-              <button class="file" data-file="contract" type="button"><span class="kind">MD</span>telemetry-contract.md</button>
+            <button class="file" data-file="projects" type="button"><span class="kind">YML</span>tenants.yml</button>
+            <button class="file" data-file="template" type="button"><span class="kind">YML</span>collector-template.yml</button>
             </div>
-            <div class="folder">runbooks/</div>
+            <div class="folder">tests/</div>
             <div class="nested">
-              <button class="file" data-file="runbook" type="button"><span class="kind">MD</span>collector-outage.md</button>
-              <button class="file" data-file="onboarding" type="button"><span class="kind">MD</span>project-onboarding.md</button>
+            <button class="file" data-file="configtests" type="button"><span class="kind">PY</span>test_collector_tenant_config.py</button>
             </div>
-          </div>
-        </div>
-      </aside>
+            </div>
+        </aside>
 
       <section class="editor">
         <div class="editor-head">
-          <span id="filePath" class="path">deploy/compose.phase1.yml</span>
+          <span id="filePath" class="path">compose.prod.yml</span>
           <span id="fileLanguage" class="language">docker compose</span>
         </div>
         <pre id="fileContent" aria-live="polite"></pre>
@@ -184,23 +186,24 @@
         <div class="panel-title">Implementation notes</div>
         <div class="details-body">
           <div class="detail-block">
-            <h3>Start with one host</h3>
-            <p>Run gateway and collector replicas across failure domains. Keep state in object storage or managed databases, not container filesystems.</p>
+            <h3>Gateway is the trust boundary</h3>
+            <p>otel-gateway:4318 is the sole public ingress. It enforces Bearer auth, refuses to start without tokens, and answers 401 without forwarding anything.</p>
           </div>
           <div class="detail-block">
             <h3>Identity has two paths</h3>
-            <p>Keycloak authenticates Grafana users. mTLS or short-lived machine credentials authenticate project telemetry.</p>
+            <p>Keycloak OIDC plus Grafana RBAC for humans. One Bearer token per project for machines, mapped to a tenant by the gateway.</p>
           </div>
           <div class="detail-block">
             <h3>Tenant identity is authoritative</h3>
-            <p>The collector maps credentials to a project and overwrites or ignores any client-supplied project ID.</p>
+            <p>Each credential routes to a private pipeline whose transform overwrites project.id, and whose exporters attach a static X-Scope-OrgID. Spoofed IDs cannot cross tenants; 18 tests prove it.</p>
           </div>
           <div class="detail-block">
             <h3>Readiness checklist</h3>
             <ul class="checklist">
-              <li>Five projects have unique credentials</li>
+              <li>Each project has a unique credential from the secret manager</li>
               <li>Grafana groups map to project roles</li>
-              <li>Storage enforces tenant headers</li>
+              <li>Spoof tests pass in both directions, invalid credentials rejected</li>
+              <li>X-Scope-OrgID reaches Mimir, Loki and Tempo per tenant</li>
               <li>Retention and quotas are tested</li>
               <li>PII scrubbing is verified</li>
               <li>Backend outage and telemetry-stop tests pass</li>
@@ -214,7 +217,7 @@
   <section class="panel panel-body" style="margin-top:18px">
     <h2>Phase boundary</h2>
     <div class="flow">
-      <div class="flow-step"><strong>Now</strong><span>One host, one instance, durable object storage, TLS, credentials, RBAC, quotas, retention, backups.</span></div>
+      <div class="flow-step"><strong>Now</strong><span>Compose stack: gateway as sole ingress, per-tenant pipelines, Mimir/Loki/Tempo OTLP ingest, Keycloak RBAC, per-tenant Grafana datasources, 18 isolation tests.</span></div>
       <div class="flow-step"><strong>Next</strong><span>Load balancer, collector replicas, Grafana HA, distributed Mimir/Loki/Tempo.</span></div>
       <div class="flow-step"><strong>Only if needed</strong><span>Automated provisioning, self-service onboarding, richer quota management, multi-region.</span></div>
       <div class="flow-step"><strong>Do not add yet</strong><span>Kubernetes, Kafka, service mesh, custom auth, custom dashboard UI, multi-region.</span></div>
@@ -222,16 +225,267 @@
   </section>
 
   <div hidden>
-    <template id="file-compose" data-path="deploy/compose.phase1.yml" data-language="docker compose">
+    <template id="file-readme" data-path="README.md" data-language="markdown">
+# Observability Platform
+
+Central, multi-tenant observability for internal projects (metrics, logs,
+traces) on a Phase 1 Docker Compose deployment: one OTLP gateway, one
+OpenTelemetry Collector, Mimir, Loki, Tempo, Grafana and Keycloak.
+
+```text
+Project application
+        │
+        └── Local OTel Collector (otlphttp + Bearer token)
+                    │
+                    ▼
+        https://ingest.observability.example.com
+                    │
+                    ▼
+            Central OTel Gateway (otel-gateway:4318)
+                    │  authenticate project, resolve trusted identity,
+                    │  ignore client project.id, route by credential
+          ┌─────────┼─────────┐
+          ▼         ▼         ▼
+        Mimir      Loki      Tempo
+```
+
+Tenant identity comes from the authenticated machine credential, never from
+client-supplied telemetry attributes. A client sending `project.id=digiflow`
+with the `ubix` credential is still stored under `ubix`.
+
+## Quickstart
+
+```bash
+cp .env.example .env   # then set real UBIX_OTEL_TOKEN / DIGIFLOW_OTEL_TOKEN
+docker compose -f compose.prod.yml up -d --build
+curl http://localhost:4318/healthz
+python3 -m pytest gateway/tests/ tests/ -v
+```
+
+## Tenant isolation
+
+### Request path
+
+```text
+OTLP/HTTP request
+  -&gt; otel-gateway:4318 ........... authentication + credential lookup
+  -&gt; project identity ............. trusted, from the Bearer credential
+  -&gt; otel-collector:4319|4320 ..... tenant-private pipeline
+  -&gt; transform overwrites ......... project.id = &lt;authenticated tenant&gt;
+  -&gt; exporter attaches ............ X-Scope-OrgID: &lt;tenant&gt;
+  -&gt; Mimir / Loki / Tempo ......... backend tenant
+```
+
+### Machine authentication
+
+Each project owns one Bearer token (Phase 1 model):
+
+```text
+Authorization: Bearer &lt;project-token&gt;
+```
+
+Tokens are configured via environment variables and never committed:
+
+| Project  | Env var              | Gateway upstream             |
+|----------|----------------------|------------------------------|
+| ubix     | `UBIX_OTEL_TOKEN`    | `http://otel-collector:4319` |
+| digiflow | `DIGIFLOW_OTEL_TOKEN`| `http://otel-collector:4320` |
+
+The gateway refuses to start if any configured tenant has no token, and
+rejects unknown/missing credentials with `401` without forwarding anything
+to any backend. Token comparison uses constant-time equality.
+
+### Credential -&gt; project mapping
+
+The mapping lives in `deploy/collector/tenant-routing.yml` (no secrets in
+that file) and is enforced at runtime by the gateway environment:
+
+```text
+token-ubix     -&gt; ubix     -&gt; otel-collector:4319 -&gt; X-Scope-OrgID: ubix
+token-digiflow -&gt; digiflow -&gt; otel-collector:4320 -&gt; X-Scope-OrgID: digiflow
+```
+
+### project.id is not trusted
+
+A client may send `project.id=digiflow` while authenticating with the ubix
+credential. This cannot cross tenants, for two independent reasons:
+
+1. **Routing precedes inspection.** The gateway forwards the opaque request
+   body to the credential owner's private pipeline (`otel-collector:4319`
+   for ubix). There is no code path from the ubix credential to the digiflow
+   pipeline.
+2. **The pipeline overwrites the attribute.** Each per-tenant pipeline runs
+   `transform/&lt;tenant&gt;_identity`, i.e. `set(attributes["project.id"],
+   "&lt;tenant&gt;")` on traces, metrics and logs. `set` replaces a spoofed value
+   and creates the attribute when absent, so both values never coexist.
+
+The gateway additionally strips any client-supplied `X-Scope-OrgID` /
+`X-Tenant` headers; the only tenant header the internal collector sees is
+the one the gateway sets from the authenticated credential.
+
+### Backend propagation
+
+Mimir, Loki and Tempo all use `X-Scope-OrgID` for multitenancy (requires
+`multitenancy_enabled: true` server-side). Each per-tenant exporter carries
+a static header because the value is fixed per pipeline:
+
+- `otlphttp/mimir_&lt;tenant&gt;` -&gt; `http://mimir:9009/otlp` (Mimir OTLP ingest)
+- `otlphttp/loki_&lt;tenant&gt;` -&gt; `http://loki:3100/otlp` (Loki OTLP ingest, &gt;= 2.9)
+- `otlphttp/tempo_&lt;tenant&gt;` -&gt; `http://tempo:4318` (Tempo OTLP/HTTP)
+
+Note: contrib 0.135.0 ships no Loki exporter, and the `bearertokenauth`
+extension accepts tokens without mapping them to identities, so dynamic
+per-request tenant headers are not expressible in pure Collector config.
+The gateway sidecar is the smallest component that closes this gap
+(stdlib-only Python, no new infrastructure).
+
+### Reproducing the spoofing test
+
+With the stack running (`compose.prod.yml`, tokens exported):
+
+```bash
+# UBIX credential, spoofed project.id=digiflow -&gt; still lands on ubix
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:4318/v1/logs \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $UBIX_OTEL_TOKEN" \
+  -d '{"resourceLogs":[{"resource":{"attributes":[
+        {"key":"service.name","value":{"stringValue":"spoof-demo"}},
+        {"key":"project.id","value":{"stringValue":"digiflow"}}]},
+      "scopeLogs":[{"logRecords":[{"body":{"stringValue":"hi"}}]}]}]}'
+
+# Gateway log shows: tenant=ubix ... -&gt; http://otel-collector:4319/v1/logs
+docker compose -f compose.prod.yml logs otel-gateway | grep tenant=
+
+# Invalid credential -&gt; 401, never forwarded
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:4318/v1/logs \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer WRONG' -d '{}'
+```
+
+Automated coverage: `python3 -m pytest gateway/tests/ tests/ -v`
+(10 live gateway isolation tests + 8 collector/registry consistency tests).
+
+## Telemetry contract
+
+Every signal must include:
+
+- service.name
+- service.version
+- deployment.environment
+- trace_id and span_id where applicable
+
+Authentication: every OTLP/HTTP request to the central gateway must carry
+`Authorization: Bearer &lt;project-token&gt;` (see
+`projects/collector-template.yml`).
+
+Tenant identity: the platform derives project identity from the
+authenticated credential (`credential -&gt; project_id`). `project.id` supplied
+by the client is NOT trusted and is overwritten by the gateway pipeline.
+Applications must not choose their tenant.
+
+Rules:
+
+- Use normalized routes, never raw URLs.
+- Do not log tokens, passwords, payloads, or personal data.
+- Keep metric labels low-cardinality.
+- Propagate W3C trace context through HTTP and RabbitMQ.
+- Use sampling for high-volume traces.
+
+## Project onboarding
+
+1. Register ownership and environments in `projects/tenants.yml`.
+2. Create Keycloak groups and Grafana organization.
+3. Create the project machine credential and store it in the secret manager:
+   - generate with `openssl rand -hex 32`
+   - export as `&lt;PROJECT&gt;_OTEL_TOKEN` (e.g. `UBIX_OTEL_TOKEN`)
+   - hand the token to the project team over a secure channel, never in git
+   - the gateway refuses to start if any tenant in
+     `deploy/collector/tenant-routing.yml` has no token configured
+4. Issue collector configuration from `projects/collector-template.yml`:
+   1. Choose runtime collector template
+   2. Set project credential (`PROJECT_OTEL_TOKEN`)
+   3. Set `service.name` (plus version/environment)
+   4. Point collector to `ingest.observability.example.com` (OTLP/HTTP)
+   5. Start application
+5. Validate metrics, logs, and traces from one service.
+6. Test RabbitMQ, Camunda, and Angular traces.
+7. Test quotas, rotation, PII scrubbing, and isolation:
+   - send with the project credential but `project.id` of another project;
+     telemetry must still land under the credential owner's tenant
+     (see [Reproducing the spoofing test](#reproducing-the-spoofing-test)).
+8. Enable dashboards and alerts.
+
+## Collector outage
+
+1. Check gateway and collector health.
+2. Check queue depth and exporter retry rate.
+3. Confirm the backend is reachable.
+4. Inspect dropped telemetry counters.
+5. Restore capacity or restart the failed replica.
+6. Verify ingestion from each affected project.
+7. Record data loss, duration, and corrective action.
+
+The platform must fail visibly. Silent telemetry loss is an incident.
+
+## Reference files
+
+| File | Purpose |
+|------|---------|
+| [`projects/collector-template.yml`](projects/collector-template.yml) | Copy-paste local collector config for projects |
+| [`projects/tenants.yml`](projects/tenants.yml) | Tenant registry (source of truth for onboarding) |
+| [`deploy/collector/tenant-routing.yml`](deploy/collector/tenant-routing.yml) | Credential → project routing registry (no secrets) |
+| [`deploy/collector/collector-config.yml`](deploy/collector/collector-config.yml) | Internal collector: per-tenant pipelines |
+| [`compose.prod.yml`](compose.prod.yml) | Production Compose topology |
+| [`.env.example`](.env.example) | Required environment / secrets (placeholders only) |
+    </template>
+    <template id="file-compose" data-path="compose.prod.yml" data-language="docker compose">
 services:
+  # Trust boundary: authenticates project Bearer tokens, maps each credential
+  # to its tenant, and proxies OTLP/HTTP to the tenant's private pipeline.
+  # This is the ONLY service that publishes the ingestion ports.
+  otel-gateway:
+    build: ./gateway
+    restart: unless-stopped
+    ports:
+      - "4318:4318"
+    environment:
+      GATEWAY_TENANTS: ubix,digiflow
+      GATEWAY_LISTEN_PORT: "4318"
+      UBIX_OTEL_TOKEN: ${UBIX_OTEL_TOKEN:?UBIX_OTEL_TOKEN is not set}
+      DIGIFLOW_OTEL_TOKEN: ${DIGIFLOW_OTEL_TOKEN:?DIGIFLOW_OTEL_TOKEN is not set}
+      UBIX_UPSTREAM: http://otel-collector:4319
+      DIGIFLOW_UPSTREAM: http://otel-collector:4320
+    depends_on:
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4318/healthz', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # Internal collector: per-tenant pipelines only. No published ports;
+  # reachable solely via the compose network (otel-gateway -&gt; otel-collector).
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.135.0
     restart: unless-stopped
-    ports:
-      - "4317:4317"
-      - "4318:4318"
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
     volumes:
-      - ./collector/collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
+      - ./deploy/collector/collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      mimir:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:13133/"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 
   grafana:
     image: grafana/grafana:12.1.0
@@ -268,49 +522,710 @@ S3_BUCKET_LOGS=observability-logs
 S3_BUCKET_TRACES=observability-traces
 DEFAULT_RETENTION_DAYS=30
 PLATFORM_ALERT_EMAIL=observability-oncall@example.com
+
+# Phase 1 machine telemetry credentials (one Bearer token per project).
+# Generate with: openssl rand -hex 32
+# The gateway refuses to start if any are empty. Never commit real tokens.
+UBIX_OTEL_TOKEN=changeme-ubix-token
+DIGIFLOW_OTEL_TOKEN=changeme-digiflow-token
     </template>
-    <template id="file-gateway" data-path="deploy/collector/collector-config.yml" data-language="yaml">
+    <template id="file-gatewaypy" data-path="gateway/gateway.py" data-language="python">
+#!/usr/bin/env python3
+"""Central OTLP tenant gateway (trust boundary).
+
+Public entrypoint for project telemetry::
+
+    project collector (OTLP/HTTP + Bearer token)
+        -&gt; otel-gateway:4318            (this service: authenticate + route)
+        -&gt; otel-collector:&lt;tenant-port&gt; (per-tenant pipeline: overwrite
+                                          project.id, export with tenant header)
+        -&gt; Mimir / Loki / Tempo
+
+Responsibilities:
+  1. Authenticate machine telemetry via ``Authorization: Bearer &lt;token&gt;``.
+     Tokens come from the environment (``&lt;TENANT&gt;_OTEL_TOKEN``); the process
+     refuses to start if any configured tenant has no token.
+  2. Map the authenticated credential to a project identity
+     (``credential -&gt; project_id``). The client-supplied ``project.id``
+     resource attribute is NEVER trusted; the body is forwarded opaquely to
+     the tenant's private pipeline, whose ``transform`` processor overwrites
+     ``project.id`` with the authenticated value.
+  3. Strip any client-supplied tenant-selection headers (``X-Scope-OrgID``,
+     ``X-Tenant``, ...) and set the trusted ``X-Scope-OrgID: &lt;tenant&gt;``
+     header on the upstream request.
+  4. Reject unknown/missing credentials with 401 without forwarding anything.
+
+Phase 1 scope: OTLP/HTTP only (``POST /v1/traces|metrics|logs``). Project
+collectors must use the ``otlphttp`` exporter. No request bodies are parsed,
+so JSON and protobuf encodings are both forwarded safely.
+
+Only the Python standard library is used (no third-party dependencies).
+"""
+
+import hmac
+import logging
+import os
+import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+LOG = logging.getLogger("otel-gateway")
+
+# OTLP/HTTP signal paths accepted by the gateway.
+SIGNALS = ("/v1/traces", "/v1/metrics", "/v1/logs")
+
+# Forwarded as-is: W3C trace context and content encoding only. Everything
+# else from the client (Authorization, X-Scope-OrgID, X-Tenant, cookies,
+# ...) is dropped by construction: the upstream request carries only the
+# trusted tenant header set below.
+
+MAX_BODY_BYTES = 32 * 1024 * 1024
+UPSTREAM_TIMEOUT_S = 30
+
+TENANT_HEADER = "X-Scope-OrgID"
+
+
+def load_config():
+    """Build tenant routing table from the environment.
+
+    GATEWAY_TENANTS: comma-separated tenant ids, e.g. ``ubix,digiflow``.
+    Per tenant ``&lt;name&gt;`` (upper-cased, dashes -&gt; underscores):
+      ``&lt;NAME&gt;_OTEL_TOKEN``  - Bearer credential (required, never logged).
+      ``&lt;NAME&gt;_UPSTREAM``    - internal collector URL, defaults to
+                               ``http://otel-collector:&lt;port&gt;`` where ports
+                               are assigned sequentially from 4319.
+    """
+    tenants_raw = os.environ.get("GATEWAY_TENANTS", "ubix,digiflow")
+    tenants = [t.strip().lower() for t in tenants_raw.split(",") if t.strip()]
+    if not tenants:
+        raise SystemExit("GATEWAY_TENANTS is empty; refusing to start.")
+
+    routing = {}
+    for i, tenant in enumerate(tenants):
+        prefix = tenant.upper().replace("-", "_")
+        token = os.environ.get(f"{prefix}_OTEL_TOKEN", "")
+        if not token:
+            raise SystemExit(
+                f"{prefix}_OTEL_TOKEN is not set; refusing to start "
+                f"without a credential for tenant '{tenant}'."
+            )
+        upstream = os.environ.get(
+            f"{prefix}_UPSTREAM", f"http://otel-collector:{4319 + i}"
+        ).rstrip("/")
+        routing[token] = {"tenant": tenant, "upstream": upstream}
+    # Same token for two tenants is a configuration error: it would make the
+    # credential -&gt; project mapping ambiguous.
+    if len(routing) != len(tenants):
+        raise SystemExit("Duplicate project tokens detected; refusing to start.")
+    port = int(os.environ.get("GATEWAY_LISTEN_PORT", "4318"))
+    return routing, port
+
+
+ROUTING, LISTEN_PORT = None, None  # set in main(); read by the handler
+
+
+def authenticate(authorization):
+    """Return the routing entry for a valid ``Bearer`` header, else None."""
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    token = token.strip()
+    for candidate, entry in ROUTING.items():
+        if hmac.compare_digest(candidate, token):
+            return entry
+    return None
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "otel-gateway/1"
+
+    def log_message(self, fmt, *args):  # route through logging, never log tokens
+        LOG.info("%s %s", self.address_string(), fmt % args)
+
+    def _send(self, status, body=b"", content_type="text/plain"):
+        data = body if isinstance(body, bytes) else body.encode()
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(data)
+
+    def do_GET(self):
+        if self.path in ("/healthz", "/readyz", "/health", "/"):
+            self._send(200, '{"status":"ok"}', "application/json")
+        else:
+            self._send(404, "not found\n")
+
+    def do_POST(self):
+        if self.path not in SIGNALS:
+            self._send(404, "unknown OTLP path; use /v1/traces, /v1/metrics or /v1/logs\n")
+            return
+
+        entry = authenticate(self.headers.get("Authorization"))
+        if entry is None:
+            # Never forward unauthenticated payloads to any backend.
+            self.send_response(401)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            LOG.warning("rejected unauthenticated %s from %s", self.path, self.address_string())
+            return
+
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            self._send(400, "invalid Content-Length\n")
+            return
+        if length &gt; MAX_BODY_BYTES:
+            self._send(413, "payload too large\n")
+            return
+        body = self.rfile.read(length) if length else b""
+
+        tenant = entry["tenant"]
+        url = entry["upstream"] + self.path
+        content_type = self.headers.get("Content-Type", "application/x-protobuf")
+        upstream = Request(url, data=body, method="POST")
+        upstream.add_header("Content-Type", content_type)
+        upstream.add_header(TENANT_HEADER, tenant)
+        # Propagate W3C trace context; drop everything tenant-related.
+        passthrough = ("traceparent", "tracestate", "content-encoding", "content-type")
+        for key, value in self.headers.items():
+            low = key.lower()
+            if low in passthrough and low not in ("content-type",):
+                upstream.add_header(key, value)
+
+        try:
+            with urlopen(upstream, timeout=UPSTREAM_TIMEOUT_S) as resp:
+                resp_body = resp.read()
+                self.send_response(resp.status)
+                self.send_header("Content-Type", resp.headers.get("Content-Type", "application/json"))
+                self.send_header("Content-Length", str(len(resp_body)))
+                self.end_headers()
+                self.wfile.write(resp_body)
+            LOG.info("tenant=%s %s %d bytes -&gt; %s", tenant, self.path, len(body), url)
+        except HTTPError as exc:
+            err_body = exc.read()
+            self.send_response(exc.code)
+            self.send_header("Content-Type", exc.headers.get("Content-Type", "text/plain"))
+            self.send_header("Content-Length", str(len(err_body)))
+            self.end_headers()
+            self.wfile.write(err_body)
+            LOG.warning("tenant=%s %s upstream=%s", tenant, self.path, exc.code)
+        except (URLError, OSError) as exc:
+            LOG.error("tenant=%s %s upstream unreachable: %s", tenant, self.path, exc)
+            self._send(502, "upstream collector unavailable\n")
+
+    # Explicitly reject anything else; the gateway only speaks OTLP/HTTP.
+    def do_PUT(self):
+        self._send(405, "method not allowed\n")
+
+    def do_DELETE(self):
+        self._send(405, "method not allowed\n")
+
+    def do_PATCH(self):
+        self._send(405, "method not allowed\n")
+
+
+def main():
+    global ROUTING, LISTEN_PORT
+    logging.basicConfig(
+        level=os.environ.get("GATEWAY_LOG_LEVEL", "INFO"),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        stream=sys.stdout,
+    )
+    ROUTING, LISTEN_PORT = load_config()
+    tenants = sorted(e["tenant"] for e in ROUTING.values())
+    LOG.info("starting: port=%d tenants=%s", LISTEN_PORT, ",".join(tenants))
+    server = ThreadingHTTPServer(("0.0.0.0", LISTEN_PORT), Handler)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()
+    </template>
+    <template id="file-dockerfile" data-path="gateway/Dockerfile" data-language="docker">
+FROM python:3.12-slim
+
+# No third-party packages: the gateway uses the standard library only.
+WORKDIR /app
+COPY gateway.py /app/gateway.py
+
+RUN useradd --create-home --uid 10001 gateway \
+    &amp;&amp; chmod 0555 /app/gateway.py
+
+USER 10001
+EXPOSE 4318
+
+ENV GATEWAY_LISTEN_PORT=4318 \
+    GATEWAY_TENANTS=ubix,digiflow \
+    PYTHONUNBUFFERED=1
+
+HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["python3", "-c", "import urllib.request,os; urllib.request.urlopen('http://127.0.0.1:%s/healthz' % os.environ.get('GATEWAY_LISTEN_PORT','4318'), timeout=2)"]
+
+CMD ["python3", "/app/gateway.py"]
+    </template>
+    <template id="file-gatewaytests" data-path="gateway/tests/test_tenant_isolation.py" data-language="python">
+"""Tenant-isolation tests for the otel-gateway trust boundary.
+
+Proves, against a live gateway backed by fake per-tenant upstreams:
+  credential -&gt; tenant mapping
+  client project.id cannot override the tenant (request lands on the
+      credential owner's pipeline; the collector overwrites project.id)
+  invalid credentials are rejected and never forwarded
+  the tenant header is generated from the credential, never from the client
+  ubix telemetry cannot reach the digiflow pipeline and vice versa
+
+Run:  python3 -m pytest gateway/tests/ -v
+Requires: pytest only (stdlib HTTP servers/clients otherwise).
+"""
+
+import importlib.util
+import json
+import threading
+import urllib.request
+import urllib.error
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import pytest
+
+GATEWAY_PATH = __file__.rsplit("/tests/", 1)[0] + "/gateway.py"
+
+TEST_TOKENS = {
+    "UBIX_OTEL_TOKEN": "test-token-ubix",
+    "DIGIFLOW_OTEL_TOKEN": "test-token-digiflow",
+    "GATEWAY_TENANTS": "ubix,digiflow",
+}
+
+
+def load_gateway(monkeypatch, upstream_ubix, upstream_digiflow):
+    monkeypatch.setenv("UBIX_OTEL_TOKEN", TEST_TOKENS["UBIX_OTEL_TOKEN"])
+    monkeypatch.setenv("DIGIFLOW_OTEL_TOKEN", TEST_TOKENS["DIGIFLOW_OTEL_TOKEN"])
+    monkeypatch.setenv("GATEWAY_TENANTS", "ubix,digiflow")
+    monkeypatch.setenv("UBIX_UPSTREAM", upstream_ubix)
+    monkeypatch.setenv("DIGIFLOW_UPSTREAM", upstream_digiflow)
+    spec = importlib.util.spec_from_file_location("otel_gateway", GATEWAY_PATH)
+    gw = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gw)
+    routing, _ = gw.load_config()
+    gw.ROUTING = routing
+    return gw
+
+
+class Recorder:
+    """Fake internal-collector endpoint for one tenant."""
+
+    def __init__(self):
+        self.hits = []
+        self.server = None
+
+    def start(self):
+        recorder = self
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                recorder.hits.append(
+                    {
+                        "path": self.path,
+                        "headers": {k.lower(): v for k, v in self.headers.items()},
+                        "body": self.rfile.read(length) if length else b"",
+                    }
+                )
+                data = b"{}"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        port = self.server.server_address[1]
+        return f"http://127.0.0.1:{port}"
+
+
+@pytest.fixture()
+def backends(monkeypatch):
+    ubix = Recorder()
+    digiflow = Recorder()
+    url_ubix = ubix.start()
+    url_digiflow = digiflow.start()
+    gw = load_gateway(monkeypatch, url_ubix, url_digiflow)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), gw.Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    yield {"gw": gw, "ubix": ubix, "digiflow": digiflow, "base": base}
+    server.shutdown()
+
+
+def otlp_logs_body(project_id):
+    return json.dumps(
+        {
+            "resourceLogs": [
+                {
+                    "resource": {
+                        "attributes": [
+                            {"key": "service.name", "value": {"stringValue": "test-svc"}},
+                            {"key": "project.id", "value": {"stringValue": project_id}},
+                        ]
+                    },
+                    "scopeLogs": [
+                        {
+                            "logRecords": [
+                                {"body": {"stringValue": "hello"}, "severityNumber": 9}
+                            ]
+                        }
+                    ],
+                }
+            ]
+        }
+    ).encode()
+
+
+def post(base, path, token=None, body=b"{}", headers=None, content_type="application/json"):
+    req = urllib.request.Request(base + path, data=body, method="POST")
+    req.add_header("Content-Type", content_type)
+    if token is not None:
+        req.add_header("Authorization", f"Bearer {token}")
+    for k, v in (headers or {}).items():
+        req.add_header(k, v)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read()
+
+
+def test_valid_ubix_request(backends):
+    status, _ = post(backends["base"], "/v1/logs", TEST_TOKENS["UBIX_OTEL_TOKEN"],
+                     otlp_logs_body("ubix"))
+    assert status == 200
+    assert len(backends["ubix"].hits) == 1
+    assert len(backends["digiflow"].hits) == 0
+    hit = backends["ubix"].hits[0]
+    assert hit["headers"].get("x-scope-orgid") == "ubix"
+    assert hit["path"] == "/v1/logs"
+
+
+def test_spoofed_project_id_is_routed_to_credential_owner(backends):
+    # UBIX credential + project.id=digiflow must still land on ubix pipeline.
+    status, _ = post(backends["base"], "/v1/logs", TEST_TOKENS["UBIX_OTEL_TOKEN"],
+                     otlp_logs_body("digiflow"))
+    assert status == 200
+    assert len(backends["ubix"].hits) == 1
+    assert len(backends["digiflow"].hits) == 0
+    assert backends["ubix"].hits[0]["headers"].get("x-scope-orgid") == "ubix"
+
+
+def test_client_tenant_header_is_stripped(backends):
+    status, _ = post(
+        backends["base"], "/v1/traces", TEST_TOKENS["UBIX_OTEL_TOKEN"],
+        otlp_logs_body("digiflow"),
+        headers={"X-Scope-OrgID": "digiflow", "X-Tenant": "digiflow"},
+        content_type="application/x-protobuf",
+    )
+    assert status == 200
+    assert len(backends["digiflow"].hits) == 0
+    hit = backends["ubix"].hits[0]
+    assert hit["headers"].get("x-scope-orgid") == "ubix"
+    assert "x-tenant" not in hit["headers"]
+    assert "authorization" not in hit["headers"]
+
+
+def test_valid_digiflow_request(backends):
+    status, _ = post(backends["base"], "/v1/metrics", TEST_TOKENS["DIGIFLOW_OTEL_TOKEN"],
+                     otlp_logs_body("digiflow"))
+    assert status == 200
+    assert len(backends["digiflow"].hits) == 1
+    assert len(backends["ubix"].hits) == 0
+    assert backends["digiflow"].hits[0]["headers"].get("x-scope-orgid") == "digiflow"
+
+
+def test_cross_tenant_spoofing_digiflow_claiming_ubix(backends):
+    status, _ = post(backends["base"], "/v1/logs", TEST_TOKENS["DIGIFLOW_OTEL_TOKEN"],
+                     otlp_logs_body("ubix"))
+    assert status == 200
+    assert len(backends["digiflow"].hits) == 1
+    assert len(backends["ubix"].hits) == 0
+    assert backends["digiflow"].hits[0]["headers"].get("x-scope-orgid") == "digiflow"
+
+
+def test_invalid_credential_rejected_and_never_forwarded(backends):
+    status, _ = post(backends["base"], "/v1/logs", "INVALID_TOKEN", otlp_logs_body("ubix"))
+    assert status == 401
+    assert backends["ubix"].hits == []
+    assert backends["digiflow"].hits == []
+
+
+def test_missing_credential_rejected(backends):
+    status, _ = post(backends["base"], "/v1/logs", None, otlp_logs_body("ubix"))
+    assert status == 401
+    assert backends["ubix"].hits == []
+    assert backends["digiflow"].hits == []
+
+
+def test_other_tenants_token_not_accepted_as_ubix(backends):
+    # Digiflow token must never produce a ubix tenant header anywhere.
+    for path in ("/v1/traces", "/v1/metrics", "/v1/logs"):
+        post(backends["base"], path, TEST_TOKENS["DIGIFLOW_OTEL_TOKEN"], b"{}")
+    assert backends["ubix"].hits == []
+    for hit in backends["digiflow"].hits:
+        assert hit["headers"].get("x-scope-orgid") == "digiflow"
+
+
+def test_unknown_path_rejected(backends):
+    status, _ = post(backends["base"], "/v1/spoof", TEST_TOKENS["UBIX_OTEL_TOKEN"], b"{}")
+    assert status == 404
+    assert backends["ubix"].hits == []
+
+
+def test_gateway_refuses_to_start_without_tokens(monkeypatch, tmp_path):
+    import os
+    monkeypatch.delenv("UBIX_OTEL_TOKEN", raising=False)
+    monkeypatch.delenv("DIGIFLOW_OTEL_TOKEN", raising=False)
+    monkeypatch.setenv("GATEWAY_TENANTS", "ubix,digiflow")
+    spec = importlib.util.spec_from_file_location("otel_gateway_nocreds", GATEWAY_PATH)
+    gw = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gw)
+    with pytest.raises(SystemExit):
+        gw.load_config()
+    </template>
+    <template id="file-collector" data-path="deploy/collector/collector-config.yml" data-language="yaml">
+# Central OpenTelemetry Collector (internal).
+#
+# Trust model: this collector NEVER faces projects directly. The only writer
+# is otel-gateway, which authenticates the project Bearer token and routes
+# each tenant to its own private OTLP receiver below. Because routing happens
+# before any telemetry is inspected, a spoofed `project.id` resource
+# attribute can never cross tenants; the per-tenant `transform/*_identity`
+# processors then overwrite it with the authenticated value as defense in
+# depth, and the per-tenant exporters attach the matching static
+# `X-Scope-OrgID` header (Mimir, Loki and Tempo all use X-Scope-OrgID for
+# multitenancy when it is enabled server-side).
+#
+# Adding a project: add otlp/&lt;id&gt; receiver on the next 43xx port, a
+# transform/&lt;id&gt;_identity processor, three otlphttp exporters with
+# X-Scope-OrgID=&lt;id&gt;, three pipelines, and the matching gateway env vars
+# (see deploy/collector/tenant-routing.yml).
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
 receivers:
-  otlp:
+  # Private per-tenant ingress. Bound to the compose network only; the
+  # gateway is the sole client. HTTP only (gateway proxies OTLP/HTTP).
+  otlp/ubix:
     protocols:
-      grpc: { endpoint: 0.0.0.0:4317 }
-      http: { endpoint: 0.0.0.0:4318 }
+      http:
+        endpoint: 0.0.0.0:4319
+        include_metadata: true
+  otlp/digiflow:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4320
+        include_metadata: true
 
 processors:
-  memory_limiter: { limit_mib: 2048 }
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 15
+
   batch: {}
-  transform/project-identity:
-    # Set project.id from authenticated connection context.
-  filter/pii:
-    # Replace secrets, tokens, account numbers, and payloads.
+
+  # Trusted identity: overwrite any client-supplied project.id with the
+  # tenant that owns this pipeline. `set` replaces a spoofed value and
+  # creates the attribute when absent, so both values can never coexist.
+  transform/ubix_identity:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["project.id"], "ubix")
+    metric_statements:
+      - context: resource
+        statements:
+          - set(attributes["project.id"], "ubix")
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["project.id"], "ubix")
+
+  transform/digiflow_identity:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["project.id"], "digiflow")
+    metric_statements:
+      - context: resource
+        statements:
+          - set(attributes["project.id"], "digiflow")
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["project.id"], "digiflow")
+
+  # Minimal secret redaction on resource attributes. Full PII scrubbing of
+  # span/log bodies remains follow-up work (see docs/collector-outage.md).
+  transform/redact_pii:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["password"], "[REDACTED]") where attributes["password"] != nil
+          - set(attributes["passwd"], "[REDACTED]") where attributes["passwd"] != nil
+          - set(attributes["secret"], "[REDACTED]") where attributes["secret"] != nil
+          - set(attributes["api_key"], "[REDACTED]") where attributes["api_key"] != nil
+          - set(attributes["client_secret"], "[REDACTED]") where attributes["client_secret"] != nil
+          - set(attributes["auth_token"], "[REDACTED]") where attributes["auth_token"] != nil
+          - set(attributes["authorization"], "[REDACTED]") where attributes["authorization"] != nil
+    metric_statements:
+      - context: resource
+        statements:
+          - set(attributes["password"], "[REDACTED]") where attributes["password"] != nil
+          - set(attributes["passwd"], "[REDACTED]") where attributes["passwd"] != nil
+          - set(attributes["secret"], "[REDACTED]") where attributes["secret"] != nil
+          - set(attributes["api_key"], "[REDACTED]") where attributes["api_key"] != nil
+          - set(attributes["client_secret"], "[REDACTED]") where attributes["client_secret"] != nil
+          - set(attributes["auth_token"], "[REDACTED]") where attributes["auth_token"] != nil
+          - set(attributes["authorization"], "[REDACTED]") where attributes["authorization"] != nil
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["password"], "[REDACTED]") where attributes["password"] != nil
+          - set(attributes["passwd"], "[REDACTED]") where attributes["passwd"] != nil
+          - set(attributes["secret"], "[REDACTED]") where attributes["secret"] != nil
+          - set(attributes["api_key"], "[REDACTED]") where attributes["api_key"] != nil
+          - set(attributes["client_secret"], "[REDACTED]") where attributes["client_secret"] != nil
+          - set(attributes["auth_token"], "[REDACTED]") where attributes["auth_token"] != nil
+          - set(attributes["authorization"], "[REDACTED]") where attributes["authorization"] != nil
 
 exporters:
-  otlphttp/internal-collector:
-    endpoint: https://otel-collector.internal:4318
+  debug:
+    verbosity: basic
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+  # Mimir OTLP ingestion: http://mimir:9009/otlp (X-Scope-OrgID = tenant).
+  otlphttp/mimir_ubix:
+    endpoint: http://mimir:9009/otlp
+    headers:
+      X-Scope-OrgID: ubix
+    retry_on_failure: { enabled: true }
+    sending_queue: { enabled: true, queue_size: 10000 }
+  otlphttp/mimir_digiflow:
+    endpoint: http://mimir:9009/otlp
+    headers:
+      X-Scope-OrgID: digiflow
+    retry_on_failure: { enabled: true }
+    sending_queue: { enabled: true, queue_size: 10000 }
+
+  # Loki OTLP ingestion (available since Loki 2.9): X-Scope-OrgID = tenant.
+  otlphttp/loki_ubix:
+    endpoint: http://loki:3100/otlp
+    headers:
+      X-Scope-OrgID: ubix
+    retry_on_failure: { enabled: true }
+    sending_queue: { enabled: true, queue_size: 10000 }
+  otlphttp/loki_digiflow:
+    endpoint: http://loki:3100/otlp
+    headers:
+      X-Scope-OrgID: digiflow
+    retry_on_failure: { enabled: true }
+    sending_queue: { enabled: true, queue_size: 10000 }
+
+  # Tempo OTLP ingestion with multitenancy_enabled: X-Scope-OrgID = tenant.
+  otlphttp/tempo_ubix:
+    endpoint: http://tempo:4318
+    headers:
+      X-Scope-OrgID: ubix
+    retry_on_failure: { enabled: true }
+    sending_queue: { enabled: true, queue_size: 10000 }
+  otlphttp/tempo_digiflow:
+    endpoint: http://tempo:4318
+    headers:
+      X-Scope-OrgID: digiflow
     retry_on_failure: { enabled: true }
     sending_queue: { enabled: true, queue_size: 10000 }
 
 service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      level: INFO
   pipelines:
-    traces: [receivers, processors, exporters]
-    metrics: [receivers, processors, exporters]
-    logs: [receivers, processors, exporters]
+    traces/ubix:
+      receivers: [otlp/ubix]
+      processors: [memory_limiter, transform/ubix_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/tempo_ubix, debug]
+    metrics/ubix:
+      receivers: [otlp/ubix]
+      processors: [memory_limiter, transform/ubix_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/mimir_ubix, debug]
+    logs/ubix:
+      receivers: [otlp/ubix]
+      processors: [memory_limiter, transform/ubix_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/loki_ubix, debug]
+    traces/digiflow:
+      receivers: [otlp/digiflow]
+      processors: [memory_limiter, transform/digiflow_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/tempo_digiflow, debug]
+    metrics/digiflow:
+      receivers: [otlp/digiflow]
+      processors: [memory_limiter, transform/digiflow_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/mimir_digiflow, debug]
+    logs/digiflow:
+      receivers: [otlp/digiflow]
+      processors: [memory_limiter, transform/digiflow_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/loki_digiflow, debug]
     </template>
     <template id="file-routing" data-path="deploy/collector/tenant-routing.yml" data-language="yaml">
+# Tenant routing registry: source of truth for credential -&gt; project mapping.
+#
+# SECURITY RULES (enforced, not advisory):
+# - Tenant identity comes ONLY from the authenticated Bearer credential.
+# - The client-supplied `project.id` resource attribute is never trusted:
+#   the gateway routes the request to the credential owner's private
+#   pipeline, whose transform processor overwrites `project.id`.
+# - Unknown credentials are rejected with 401 and never reach any backend.
+#
+# NO SECRETS IN THIS FILE. Tokens live in the environment / secret manager:
+#   UBIX_OTEL_TOKEN, DIGIFLOW_OTEL_TOKEN (see .env.example).
+# The gateway refuses to start if any tenant below has no token configured.
+
+gateway:
+  image: otel-gateway (built from ./gateway)
+  listen: 0.0.0.0:4318
+  tenants_env: GATEWAY_TENANTS  # "ubix,digiflow"
+
 tenants:
   ubix:
-    credential: secret/ubix/otel
-    storage_tenant: ubix
+    token_env: UBIX_OTEL_TOKEN
+    collector_receiver: otlp/ubix
+    collector_upstream: http://otel-collector:4319
+    storage_tenant: ubix # sent as X-Scope-OrgID to Mimir, Loki and Tempo
     max_series: 250000
     log_rate_mb: 20
   digiflow:
-    credential: secret/digiflow/otel
-    storage_tenant: digiflow
+    token_env: DIGIFLOW_OTEL_TOKEN
+    collector_receiver: otlp/digiflow
+    collector_upstream: http://otel-collector:4320
+    storage_tenant: digiflow # sent as X-Scope-OrgID to Mimir, Loki and Tempo
     max_series: 250000
     log_rate_mb: 20
-
-# Unknown credentials are rejected.
-# The gateway overwrites project.id.
     </template>
     <template id="file-storage" data-path="deploy/storage/storage-values.yml" data-language="yaml">
 metrics:
@@ -334,15 +1249,15 @@ traces:
     <template id="file-object" data-path="deploy/storage/object-storage.yml" data-language="yaml">
 bucket_policy:
   observability-metrics:
-    versioning: enabled
+    versioning: false
     encryption: kms
     lifecycle: archive-after-90d
   observability-logs:
-    versioning: enabled
+    versioning: false
     encryption: kms
     lifecycle: delete-after-30d
   observability-traces:
-    versioning: enabled
+    versioning: false
     encryption: kms
     lifecycle: delete-after-14d
 
@@ -413,8 +1328,42 @@ datasources:
   - name: ubix-logs
     type: loki
     url: http://loki:3100
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
     secureJsonData:
       httpHeaderValue1: ubix
+
+  - name: digiflow-metrics
+    type: prometheus
+    url: http://mimir:9009/prometheus
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: digiflow
+
+  - name: digiflow-logs
+    type: loki
+    url: http://loki:3100
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: digiflow
+
+  - name: ubix-traces
+    type: tempo
+    url: http://tempo:3200
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: ubix
+
+  - name: digiflow-traces
+    type: tempo
+    url: http://tempo:3200
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: digiflow
 
 # Repeat per project. Never expose an unrestricted shared datasource.
     </template>
@@ -442,11 +1391,11 @@ groups:
   - name: observability-platform
     rules:
       - alert: CollectorExportFailures
-        expr: rate(otelcol_exporter_send_failed_spans[5m]) / clamp_min(rate(otelcol_exporter_sent_spans[5m]), 1) > 0.05
+        expr: rate(otelcol_exporter_send_failed_spans[5m]) / clamp_min(rate(otelcol_exporter_sent_spans[5m]), 1) &gt; 0.05
         for: 10m
         labels: { severity: critical }
       - alert: TenantQuotaNearLimit
-        expr: observability_tenant_quota_ratio > 0.8
+        expr: observability_tenant_quota_ratio &gt; 0.8
         for: 15m
         labels: { severity: warning }
       - alert: TelemetryStopped
@@ -473,48 +1422,187 @@ projects:
 
 # Keep this registry as the source of truth for onboarding.
     </template>
-    <template id="file-contract" data-path="projects/telemetry-contract.md" data-language="markdown">
-# Telemetry contract
+    <template id="file-template" data-path="projects/collector-template.yml" data-language="yaml">
+# Local OpenTelemetry Collector template for platform projects.
+#
+# Onboarding:
+#   1. Copy this file to your service repository.
+#   2. Set PROJECT_OTEL_TOKEN to the token issued by the platform team.
+#   3. Set service.name (and service.version / deployment.environment).
+#   4. Point the exporter at https://ingest.observability.example.com
+#      (OTLP/HTTP :4318 in this Phase 1 deployment).
+#   5. Start the application and verify one metric, log and trace arrive.
+#
+# Rules:
+# - Use the otlphttp exporter (Phase 1 gateway serves OTLP/HTTP only).
+# - Send Authorization: Bearer ${PROJECT_OTEL_TOKEN} on every request.
+# - Do NOT set project.id yourself: the platform derives it from your
+#   credential and overwrites any client-supplied value.
+# - Do NOT set X-Scope-OrgID: the gateway sets it from your credential.
 
-Every signal must include:
-- service.name
-- service.version
-- deployment.environment
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
 
-The platform derives project.id from authenticated project identity. Applications must not choose their tenant.
-- trace_id and span_id where applicable
+processors:
+  batch: {}
+  resource:
+    attributes:
+      - key: service.name
+        value: ${SERVICE_NAME:?set service.name for your service}
+        action: upsert
+      - key: service.version
+        value: ${SERVICE_VERSION:-unknown}
+        action: upsert
+      - key: deployment.environment
+        value: ${DEPLOYMENT_ENVIRONMENT:-production}
+        action: upsert
 
-Rules:
-- Use normalized routes, never raw URLs.
-- Do not log tokens, passwords, payloads, or personal data.
-- Keep metric labels low-cardinality.
-- Propagate W3C trace context through HTTP and RabbitMQ.
-- Use sampling for high-volume traces.
+exporters:
+  otlphttp/platform:
+    endpoint: ${PLATFORM_INGEST_URL:-https://ingest.observability.example.com}
+    headers:
+      Authorization: "Bearer ${PROJECT_OTEL_TOKEN:?set the project token issued by the platform team}"
+    retry_on_failure: { enabled: true }
+    sending_queue: { enabled: true, queue_size: 5000 }
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlphttp/platform]
+    metrics:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlphttp/platform]
+    logs:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlphttp/platform]
     </template>
-    <template id="file-runbook" data-path="runbooks/collector-outage.md" data-language="markdown">
-# Collector outage
+    <template id="file-configtests" data-path="tests/test_collector_tenant_config.py" data-language="python">
+"""Static consistency tests: gateway, collector, registry and compose agree.
 
-1. Check gateway and collector health.
-2. Check queue depth and exporter retry rate.
-3. Confirm the backend is reachable.
-4. Inspect dropped telemetry counters.
-5. Restore capacity or restart the failed replica.
-6. Verify ingestion from each affected project.
-7. Record data loss, duration, and corrective action.
+Run:  python3 -m pytest tests/ -v
+Requires: pytest, pyyaml.
+"""
 
-The platform must fail visibly. Silent telemetry loss is an incident.
-    </template>
-    <template id="file-onboarding" data-path="runbooks/project-onboarding.md" data-language="markdown">
-# Project onboarding
+import re
+import urllib.parse
+from pathlib import Path
 
-1. Register ownership and environments.
-2. Create Keycloak groups and Grafana organization.
-3. Create project machine credentials.
-4. Issue collector configuration.
-5. Validate metrics, logs, and traces from one service.
-6. Test RabbitMQ, Camunda, and Angular traces.
-7. Test quotas, rotation, PII scrubbing, and isolation.
-8. Enable dashboards and alerts.
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+COLLECTOR_CFG = ROOT / "deploy/collector/collector-config.yml"
+ROUTING = ROOT / "deploy/collector/tenant-routing.yml"
+TENANTS = ROOT / "projects/tenants.yml"
+ENV_EXAMPLE = ROOT / ".env.example"
+COMPOSE = ROOT / "compose.prod.yml"
+
+EXPECTED_TENANTS = {"ubix", "digiflow"}
+
+
+@pytest.fixture(scope="module")
+def collector():
+    return yaml.safe_load(COLLECTOR_CFG.read_text())
+
+
+@pytest.fixture(scope="module")
+def routing():
+    return yaml.safe_load(ROUTING.read_text())
+
+
+def test_tenant_sets_match_everywhere(routing):
+    assert set(routing["tenants"]) == EXPECTED_TENANTS
+    registry = yaml.safe_load(TENANTS.read_text())
+    assert {p["id"] for p in registry["projects"]} &gt;= EXPECTED_TENANTS
+
+
+def test_per_tenant_receivers_match_gateway_upstreams(collector, routing):
+    receivers = collector["receivers"]
+    for tenant, info in routing["tenants"].items():
+        name = info["collector_receiver"]
+        assert name == f"otlp/{tenant}"
+        assert name in receivers
+        endpoint = receivers[name]["protocols"]["http"]["endpoint"]
+        port = endpoint.rsplit(":", 1)[1]
+        upstream_port = str(urllib.parse.urlparse(info["collector_upstream"]).port)
+        assert port == upstream_port, f"{tenant}: receiver port != gateway upstream port"
+
+
+def test_identity_processors_overwrite_project_id(collector, routing):
+    processors = collector["processors"]
+    for tenant in routing["tenants"]:
+        name = f"transform/{tenant}_identity"
+        assert name in processors
+        cfg = processors[name]
+        expected = f'set(attributes["project.id"], "{tenant}")'
+        for section in ("trace_statements", "metric_statements", "log_statements"):
+            assert section in cfg, f"{name} missing {section}"
+            joined = " ".join(
+                str(s.get("statements", "")) for s in cfg[section]
+            )
+            assert expected in joined, f"{name}/{section} does not set project.id={tenant}"
+
+
+def test_per_tenant_exporters_use_tenant_header(collector, routing):
+    exporters = collector["exporters"]
+    for tenant, info in routing["tenants"].items():
+        for backend in ("mimir", "loki", "tempo"):
+            name = f"otlphttp/{backend}_{tenant}"
+            assert name in exporters, f"missing exporter {name}"
+            headers = exporters[name].get("headers", {})
+            assert headers.get("X-Scope-OrgID") == info["storage_tenant"] == tenant
+
+
+def test_pipelines_wire_receiver_identity_exporters(collector, routing):
+    pipelines = collector["service"]["pipelines"]
+    for tenant, info in routing["tenants"].items():
+        receiver = info["collector_receiver"]
+        identity = f"transform/{tenant}_identity"
+        for signal, backend in (("traces", "tempo"), ("metrics", "mimir"), ("logs", "loki")):
+            pipe = pipelines[f"{signal}/{tenant}"]
+            assert receiver in pipe["receivers"]
+            assert identity in pipe["processors"]
+            assert f"otlphttp/{backend}_{tenant}" in pipe["exporters"]
+
+
+def test_no_static_cross_tenant_header(collector):
+    text = COLLECTOR_CFG.read_text()
+    for tenant in EXPECTED_TENANTS:
+        other = (EXPECTED_TENANTS - {tenant}).pop()
+        # A ubix pipeline must never carry the digiflow tenant header.
+        for line_no, line in enumerate(text.splitlines(), 1):
+            if f"_{tenant}:" in line or f"/{tenant}" in line:
+                context = "\n".join(text.splitlines()[max(0, line_no - 1):line_no + 6])
+                assert f"X-Scope-OrgID: {other}" not in context
+
+
+def test_env_example_has_placeholders_not_secrets():
+    text = ENV_EXAMPLE.read_text()
+    for tenant in ("UBIX", "DIGIFLOW"):
+        match = re.search(rf"^{tenant}_OTEL_TOKEN=(.+)$", text, re.M)
+        assert match, f"{tenant}_OTEL_TOKEN missing from .env.example"
+        assert "changeme" in match.group(1), "expected a placeholder, not a real secret"
+
+
+def test_compose_wiring():
+    compose = yaml.safe_load(COMPOSE.read_text())
+    services = compose["services"]
+    gw = services["otel-gateway"]
+    # Gateway is the only publisher of the ingestion port.
+    assert "4318:4318" in gw["ports"]
+    assert services["otel-collector"].get("ports") is None
+    env = gw["environment"]
+    assert "UBIX_OTEL_TOKEN" in env and "DIGIFLOW_OTEL_TOKEN" in env
+    assert "UBIX_OTEL_TOKEN:?UBIX_OTEL_TOKEN is not set" in str(env["UBIX_OTEL_TOKEN"])
+    assert env["UBIX_UPSTREAM"] == "http://otel-collector:4319"
+    assert env["DIGIFLOW_UPSTREAM"] == "http://otel-collector:4320"
     </template>
   </div>
 

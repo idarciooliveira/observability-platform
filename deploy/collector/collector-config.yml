@@ -75,7 +75,7 @@ processors:
           - set(attributes["project.id"], "digiflow")
 
   # Minimal secret redaction on resource attributes. Full PII scrubbing of
-  # span/log bodies remains follow-up work (see runbooks/collector-outage.md).
+  # span/log bodies remains follow-up work (see docs/collector-outage.md).
   transform/redact_pii:
     error_mode: ignore
     trace_statements:
