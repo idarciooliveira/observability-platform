@@ -1,0 +1,99 @@
+# retail-collector (contrib 0.135.0) — Variant A customer-side collector.
+#
+# retail-api sends OTLP here (plaintext, no auth — reachable only inside
+# `retail-example`). This collector filters/buffers, then forwards via
+# OTLP/HTTP to the platform compose.local.yml gateway, which authenticates
+# DIGIFLOW_OTEL_TOKEN and OVERWRITES project.id=digiflow server-side.
+# This collector is NEVER trusted as a security boundary.
+#
+# Token comes from container env (DIGIFLOW_OTEL_TOKEN, see .env.example).
+# Must match DIGIFLOW_OTEL_TOKEN in observability-platform/.env.
+
+extensions:
+  health_check:
+  file_storage:
+    directory: /var/lib/otelcol
+  bearertokenauth/platform:
+    # Injects `Authorization: Bearer <DIGIFLOW_OTEL_TOKEN>` on the platform leg
+    # so the token never lives in this committed file.
+    token: "${env:DIGIFLOW_OTEL_TOKEN}"
+
+receivers:
+  # Plaintext, no auth: only retail-api can reach this (customer network).
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+
+  # Drop health/readiness noise before it leaves the customer network.
+  filter:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["http.target"] == "/health" or attributes["http.target"] == "/ready"'
+        - 'attributes["http.route"] == "/health" or attributes["http.route"] == "/ready"'
+    logs:
+      log_record:
+        - 'attributes["http.target"] == "/health" or attributes["http.target"] == "/ready"'
+
+  # Early, best-effort PII scrub. The central collector re-scrubs
+  # authoritatively — this only reduces what leaves the customer network.
+  transform:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - replace_pattern(span.attributes["url.path"], "\\b\\d{8,}\\b", "[REDACTED]") where span.attributes["url.path"] != nil
+          - replace_pattern(span.attributes["http.target"], "\\b\\d{8,}\\b", "[REDACTED]") where span.attributes["http.target"] != nil
+    log_statements:
+      - context: log
+        statements:
+          - replace_pattern(log.attributes["url.path"], "\\b\\d{8,}\\b", "[REDACTED]") where log.attributes["url.path"] != nil
+          - replace_pattern(log.body, "\\b\\d{8,}\\b", "[REDACTED]") where IsString(log.body)
+
+  batch:
+    send_batch_size: 1024
+    timeout: 10s
+
+exporters:
+  # Sole egress: OTLP/HTTP to the platform gateway via Docker internal
+  # (compose.local.yml otel-gateway:4318). Auth via bearertokenauth/platform
+  # extension. File-backed queue buffers gateway outages — the core
+  # resilience comparison vs direct export (Variant B).
+  otlphttp/platform:
+    endpoint: "http://host.docker.internal:4318"
+    auth:
+      authenticator: bearertokenauth/platform
+    sending_queue:
+      enabled: true
+      storage: file_storage
+      queue_size: 5000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+service:
+  extensions: [health_check, file_storage, bearertokenauth/platform]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, filter, transform, batch]
+      exporters: [otlphttp/platform]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/platform]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, filter, transform, batch]
+      exporters: [otlphttp/platform]
