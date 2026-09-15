@@ -34,8 +34,6 @@ services:
     image: grafana/mimir:2.16.0
     restart: unless-stopped
     command: ["-config.file=/etc/mimir/mimir.yml", "-target=all"]
-    ports:
-      - "9009:9009"
     volumes:
       - ./deploy/local/mimir.yml:/etc/mimir/mimir.yml:ro
       - mimir-data:/data/mimir
@@ -44,8 +42,6 @@ services:
     image: grafana/loki:3.7.6
     restart: unless-stopped
     command: ["-config.file=/etc/loki/loki.yml"]
-    ports:
-      - "3100:3100"
     volumes:
       - ./deploy/local/loki.yml:/etc/loki/loki.yml:ro
       - loki-data:/loki
@@ -54,8 +50,6 @@ services:
     image: grafana/tempo:2.8.0
     restart: unless-stopped
     command: ["-config.file=/etc/tempo/tempo.yml"]
-    ports:
-      - "3200:3200"
     volumes:
       - ./deploy/local/tempo.yml:/etc/tempo/tempo.yml:ro
       - tempo-data:/var/tempo
