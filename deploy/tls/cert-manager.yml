@@ -1,0 +1,13 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: observability-ingestion
+spec:
+  secretName: observability-ingestion-tls
+  issuerRef:
+    name: internal-ca
+    kind: ClusterIssuer
+  dnsNames:
+    - otel-gateway.internal.example
+
+# Rotate certificates before expiry.

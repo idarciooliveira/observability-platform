@@ -1,0 +1,17 @@
+apiVersion: 1
+datasources:
+  - name: ubix-metrics
+    type: prometheus
+    url: http://mimir:9009/prometheus
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: ubix
+
+  - name: ubix-logs
+    type: loki
+    url: http://loki:3100
+    secureJsonData:
+      httpHeaderValue1: ubix
+
+# Repeat per project. Never expose an unrestricted shared datasource.

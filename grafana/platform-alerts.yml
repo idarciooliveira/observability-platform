@@ -1,0 +1,19 @@
+groups:
+  - name: observability-platform
+    rules:
+      - alert: CollectorExportFailures
+        expr: rate(otelcol_exporter_send_failed_spans[5m]) / clamp_min(rate(otelcol_exporter_sent_spans[5m]), 1) > 0.05
+        for: 10m
+        labels: { severity: critical }
+      - alert: TenantQuotaNearLimit
+        expr: observability_tenant_quota_ratio > 0.8
+        for: 15m
+        labels: { severity: warning }
+      - alert: TelemetryStopped
+        expr: absent_over_time(otelcol_receiver_accepted_spans[15m])
+        for: 15m
+        labels: { severity: critical }
+      - alert: StorageBackendUnavailable
+        expr: up{job=~"loki|tempo|mimir"} == 0
+        for: 5m
+        labels: { severity: critical }

@@ -1,0 +1,13 @@
+projects:
+  - id: ubix
+    display_name: Ubix
+    owner_group: ubix-editors
+    grafana_org: ubix
+    environments: [dev, staging, production]
+  - id: digiflow
+    display_name: Digiflow
+    owner_group: digiflow-editors
+    grafana_org: digiflow
+    environments: [dev, staging, production]
+
+# Keep this registry as the source of truth for onboarding.

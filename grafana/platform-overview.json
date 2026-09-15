@@ -1,0 +1,17 @@
+{
+  "title": "Platform overview",
+  "folder": "Platform",
+  "panels": [
+    "ingested telemetry rate",
+    "collector export failures",
+    "dropped spans and logs",
+    "query latency",
+    "storage capacity",
+    "tenant quota usage",
+    "OTLP request rate, errors, and latency",
+    "collector queue size and resource usage",
+    "tenant ingestion and dropped telemetry",
+    "gateway availability"
+  ],
+  "datasource": "platform-federated"
+}

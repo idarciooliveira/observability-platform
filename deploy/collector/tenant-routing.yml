@@ -1,0 +1,14 @@
+tenants:
+  ubix:
+    credential: secret/ubix/otel
+    storage_tenant: ubix
+    max_series: 250000
+    log_rate_mb: 20
+  digiflow:
+    credential: secret/digiflow/otel
+    storage_tenant: digiflow
+    max_series: 250000
+    log_rate_mb: 20
+
+# Unknown credentials are rejected.
+# The gateway overwrites project.id.

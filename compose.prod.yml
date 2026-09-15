@@ -1,0 +1,33 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    restart: unless-stopped
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./deploy/collector/collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    restart: unless-stopped
+
+  mimir:
+    image: grafana/mimir:2.16.0
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.7.6
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.8.0
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    restart: unless-stopped
+
+# Phase 1 deliberately uses one instance of each service.
+# Add replicas and a load balancer only when real failure domains
+# and traffic justify HA.

@@ -1,0 +1,17 @@
+metrics:
+  backend: mimir
+  replicas: 1
+  retention: 90d
+  object_store: s3://observability-metrics
+
+logs:
+  backend: loki
+  replicas: 1
+  retention: 14d
+  object_store: s3://observability-logs
+
+traces:
+  backend: tempo
+  replicas: 1
+  retention: 7d
+  object_store: s3://observability-traces

@@ -1,0 +1,18 @@
+groups:
+  /obs-platform-admins:
+    organizations:
+      observability-platform: Admin
+  /ubix-viewers:
+    organizations:
+      ubix: Viewer
+  /ubix-editors:
+    organizations:
+      ubix: Editor
+  /digiflow-viewers:
+    organizations:
+      digiflow: Viewer
+  /digiflow-editors:
+    organizations:
+      digiflow: Editor
+
+# Each project organization has project-specific datasources.

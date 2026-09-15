@@ -1,0 +1,14 @@
+{
+  "realm": "observability",
+  "clients": ["grafana"],
+  "groups": [
+    "/obs-platform-admins",
+    "/ubix-viewers",
+    "/ubix-editors",
+    "/digiflow-viewers",
+    "/digiflow-editors"
+  ]
+}
+
+// Human access uses Keycloak OIDC.
+// Machine telemetry uses project credentials or mTLS.

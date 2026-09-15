@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Observability platform foundation · v2</title>
+  <style>
+    :root {
+      --bg:#f4f6f8; --panel:#fff; --line:#d9dfe6; --text:#1f2933;
+      --muted:#697586; --accent:#315d78; --accent-soft:#e8f0f4;
+      --code:#202832; --code-text:#dbe5ec; --ok:#35664f;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text);
+      font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+    button { font:inherit; }
+    .shell { width:min(1440px,calc(100% - 40px)); margin:0 auto; }
+    header { background:var(--panel); border-bottom:1px solid var(--line); }
+    .topbar { min-height:72px; display:flex; align-items:center;
+      justify-content:space-between; gap:24px; }
+    .eyebrow { margin:0 0 3px; color:var(--muted); font-size:11px;
+      font-weight:700; letter-spacing:.1em; text-transform:uppercase; }
+    h1,h2,h3,p { margin-top:0; }
+    h1 { margin-bottom:4px; font-size:22px; letter-spacing:-.02em; }
+    h2 { margin-bottom:8px; font-size:17px; }
+    h3 { margin-bottom:5px; font-size:14px; }
+    .topbar p,.intro p { margin-bottom:0; color:var(--muted); }
+    .badge { border:1px solid #b9cbd6; border-radius:999px; padding:5px 10px;
+      color:var(--accent); background:var(--accent-soft); font-size:12px; white-space:nowrap; }
+    main { padding:28px 0 48px; }
+    .intro { display:grid; grid-template-columns:1.3fr 1fr; gap:16px; margin-bottom:18px; }
+    .panel { border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+    .panel-body { padding:18px; }
+    .flow { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:14px; }
+    .flow-step { border:1px solid var(--line); border-radius:6px; padding:10px; background:#fafbfc; }
+    .flow-step strong { display:block; font-size:12px; }
+    .flow-step span { color:var(--muted); font-size:12px; }
+    .workspace { display:grid; grid-template-columns:270px minmax(0,1fr) 310px;
+      min-height:620px; overflow:hidden; }
+    .tree,.details { background:#fbfcfd; }
+    .tree { border-right:1px solid var(--line); }
+    .details { border-left:1px solid var(--line); }
+    .panel-title { display:flex; align-items:center; justify-content:space-between;
+      min-height:49px; padding:0 15px; border-bottom:1px solid var(--line);
+      color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+    .tree-content { padding:10px 8px 16px; }
+    .tree-label { padding:7px 8px 5px; color:var(--muted); font-size:12px; }
+    .folder { padding:7px 8px 4px; font-weight:700; }
+    .nested { margin-left:12px; border-left:1px solid var(--line); padding-left:8px; }
+    .file { display:flex; width:100%; align-items:center; gap:7px; border:0; border-radius:5px;
+      padding:7px 8px; color:var(--text); background:transparent; text-align:left; cursor:pointer; font-size:13px; }
+    .file:hover,.file.active { background:var(--accent-soft); color:var(--accent); }
+    .file .kind { width:17px; color:var(--muted); font-size:10px; text-align:center; }
+    .editor { min-width:0; }
+    .editor-head { display:flex; align-items:center; justify-content:space-between; gap:12px;
+      min-height:49px; padding:0 18px; border-bottom:1px solid var(--line); }
+    .path { color:var(--muted); font:12px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .language { color:var(--muted); font-size:12px; }
+    pre { min-height:570px; margin:0; overflow:auto; padding:20px; background:var(--code); color:var(--code-text);
+      font:12px/1.65 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; white-space:pre-wrap; }
+    .details-body { padding:18px; }
+    .detail-block { padding-bottom:16px; margin-bottom:16px; border-bottom:1px solid var(--line); }
+    .detail-block:last-child { padding-bottom:0; margin-bottom:0; border-bottom:0; }
+    .detail-block p { margin-bottom:0; color:var(--muted); font-size:13px; }
+    .checklist { display:grid; gap:8px; padding:0; margin:0; list-style:none; }
+    .checklist li { display:flex; gap:8px; color:var(--muted); font-size:13px; }
+    .checklist li::before { content:"✓"; color:var(--ok); font-weight:700; }
+    .note { border-left:3px solid var(--accent); padding-left:10px; color:var(--muted); font-size:13px; }
+    .legend { display:flex; flex-wrap:wrap; gap:8px 14px; margin-top:14px; color:var(--muted); font-size:12px; }
+    @media (max-width:1050px) {
+      .workspace { grid-template-columns:225px minmax(0,1fr); }
+      .details { grid-column:1 / -1; border-top:1px solid var(--line); border-left:0; }
+      .details-body { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
+      .detail-block { margin:0; border:0; }
+    }
+    @media (max-width:760px) {
+      .shell { width:min(100% - 24px,1440px); }
+      .topbar,.intro { display:block; }
+      .badge { display:inline-block; margin-top:12px; }
+      .intro > .panel + .panel { margin-top:12px; }
+      .flow { grid-template-columns:repeat(2,1fr); }
+      .workspace { display:block; }
+      .tree { border-right:0; border-bottom:1px solid var(--line); }
+      .tree-content { max-height:280px; overflow:auto; }
+      .details-body { display:block; }
+      .detail-block { padding-bottom:16px; margin-bottom:16px; border-bottom:1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="shell topbar">
+      <div>
+        <p class="eyebrow">Phase 1 · platform foundation</p>
+        <h1>Observability platform repository</h1>
+        <p>A simple production foundation for five isolated internal projects, designed to scale later.</p>
+      </div>
+      <span class="badge">prototype v2 · single-node production</span>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="intro">
+      <div class="panel panel-body">
+        <h2>What this phase establishes</h2>
+        <p>The platform team owns shared ingestion, storage, identity, and access. Project teams instrument applications and run local collectors. Phase 1 uses one deployment host with multi-tenancy by design.</p>
+        <div class="flow">
+          <div class="flow-step"><strong>Project servers</strong><span>Java, Angular, Camunda, RabbitMQ</span></div>
+          <div class="flow-step"><strong>Local collectors</strong><span>Batch, retry, scrub, enrich</span></div>
+          <div class="flow-step"><strong>Central collector</strong><span>TLS, auth, tenant routing, PII filtering</span></div>
+          <div class="flow-step"><strong>LGTM + Grafana</strong><span>Mimir, Loki, Tempo, Keycloak</span></div>
+        </div>
+      </div>
+      <div class="panel panel-body">
+        <h2>Ownership boundary</h2>
+        <p class="note">Project teams own application instrumentation and service dashboards. The platform team owns shared ingestion, storage, tenant isolation, Grafana access, quotas, retention, backups, and platform alerts.</p>
+        <div class="legend">
+          <span>● <b>config</b> versioned</span>
+          <span>● <b>secret</b> from a secret manager</span>
+          <span>● <b>data</b> in object storage</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel workspace" aria-label="Repository prototype">
+      <aside class="tree">
+        <div class="panel-title"><span>Repository</span><span>Phase 1</span></div>
+        <div class="tree-content">
+          <div class="folder">observability-platform/</div>
+          <div class="nested">
+            <button class="file active" data-file="compose" type="button"><span class="kind">YML</span>compose.phase1.yml</button>
+            <button class="file" data-file="env" type="button"><span class="kind">ENV</span>.env.example</button>
+            <div class="folder">deploy/</div>
+            <div class="nested">
+              <div class="folder">collector/</div>
+              <div class="nested">
+                <button class="file" data-file="gateway" type="button"><span class="kind">YML</span>collector-config.yml</button>
+                <button class="file" data-file="routing" type="button"><span class="kind">YML</span>tenant-routing.yml</button>
+              </div>
+              <div class="folder">storage/</div>
+              <div class="nested">
+                <button class="file" data-file="storage" type="button"><span class="kind">YML</span>storage-values.yml</button>
+                <button class="file" data-file="object" type="button"><span class="kind">YML</span>object-storage.yml</button>
+              </div>
+              <div class="folder">tls/</div>
+              <div class="nested">
+                <button class="file" data-file="tls" type="button"><span class="kind">YML</span>cert-manager.yml</button>
+              </div>
+            </div>
+            <div class="folder">identity/</div>
+            <div class="nested">
+              <button class="file" data-file="keycloak" type="button"><span class="kind">JSON</span>keycloak-realm.json</button>
+              <button class="file" data-file="rbac" type="button"><span class="kind">YML</span>grafana-rbac.yml</button>
+            </div>
+            <div class="folder">grafana/</div>
+            <div class="nested">
+              <button class="file" data-file="datasources" type="button"><span class="kind">YML</span>datasources.yml</button>
+              <button class="file" data-file="dashboard" type="button"><span class="kind">JSON</span>platform-overview.json</button>
+              <button class="file" data-file="alerts" type="button"><span class="kind">YML</span>platform-alerts.yml</button>
+            </div>
+            <div class="folder">projects/</div>
+            <div class="nested">
+              <button class="file" data-file="projects" type="button"><span class="kind">YML</span>tenants.yml</button>
+              <button class="file" data-file="contract" type="button"><span class="kind">MD</span>telemetry-contract.md</button>
+            </div>
+            <div class="folder">runbooks/</div>
+            <div class="nested">
+              <button class="file" data-file="runbook" type="button"><span class="kind">MD</span>collector-outage.md</button>
+              <button class="file" data-file="onboarding" type="button"><span class="kind">MD</span>project-onboarding.md</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <section class="editor">
+        <div class="editor-head">
+          <span id="filePath" class="path">deploy/compose.phase1.yml</span>
+          <span id="fileLanguage" class="language">docker compose</span>
+        </div>
+        <pre id="fileContent" aria-live="polite"></pre>
+      </section>
+
+      <aside class="details">
+        <div class="panel-title">Implementation notes</div>
+        <div class="details-body">
+          <div class="detail-block">
+            <h3>Start with one host</h3>
+            <p>Run gateway and collector replicas across failure domains. Keep state in object storage or managed databases, not container filesystems.</p>
+          </div>
+          <div class="detail-block">
+            <h3>Identity has two paths</h3>
+            <p>Keycloak authenticates Grafana users. mTLS or short-lived machine credentials authenticate project telemetry.</p>
+          </div>
+          <div class="detail-block">
+            <h3>Tenant identity is authoritative</h3>
+            <p>The collector maps credentials to a project and overwrites or ignores any client-supplied project ID.</p>
+          </div>
+          <div class="detail-block">
+            <h3>Readiness checklist</h3>
+            <ul class="checklist">
+              <li>Five projects have unique credentials</li>
+              <li>Grafana groups map to project roles</li>
+              <li>Storage enforces tenant headers</li>
+              <li>Retention and quotas are tested</li>
+              <li>PII scrubbing is verified</li>
+              <li>Backend outage and telemetry-stop tests pass</li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <section class="panel panel-body" style="margin-top:18px">
+    <h2>Phase boundary</h2>
+    <div class="flow">
+      <div class="flow-step"><strong>Now</strong><span>One host, one instance, durable object storage, TLS, credentials, RBAC, quotas, retention, backups.</span></div>
+      <div class="flow-step"><strong>Next</strong><span>Load balancer, collector replicas, Grafana HA, distributed Mimir/Loki/Tempo.</span></div>
+      <div class="flow-step"><strong>Only if needed</strong><span>Automated provisioning, self-service onboarding, richer quota management, multi-region.</span></div>
+      <div class="flow-step"><strong>Do not add yet</strong><span>Kubernetes, Kafka, service mesh, custom auth, custom dashboard UI, multi-region.</span></div>
+    </div>
+  </section>
+
+  <div hidden>
+    <template id="file-compose" data-path="deploy/compose.phase1.yml" data-language="docker compose">
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    restart: unless-stopped
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./collector/collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    restart: unless-stopped
+
+  mimir:
+    image: grafana/mimir:2.16.0
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.7.6
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.8.0
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    restart: unless-stopped
+
+# Phase 1 deliberately uses one instance of each service.
+# Add replicas and a load balancer only when real failure domains
+# and traffic justify HA.
+    </template>
+    <template id="file-env" data-path=".env.example" data-language="environment">
+# Place real values in the secret manager.
+# Never commit this file with real credentials.
+GRAFANA_ADMIN_USER=platform-admin
+KEYCLOAK_ISSUER=https://sso.internal.example/realms/observability
+S3_ENDPOINT=https://object-storage.internal.example
+S3_BUCKET_METRICS=observability-metrics
+S3_BUCKET_LOGS=observability-logs
+S3_BUCKET_TRACES=observability-traces
+DEFAULT_RETENTION_DAYS=30
+PLATFORM_ALERT_EMAIL=observability-oncall@example.com
+    </template>
+    <template id="file-gateway" data-path="deploy/collector/collector-config.yml" data-language="yaml">
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+
+processors:
+  memory_limiter: { limit_mib: 2048 }
+  batch: {}
+  transform/project-identity:
+    # Set project.id from authenticated connection context.
+  filter/pii:
+    # Replace secrets, tokens, account numbers, and payloads.
+
+exporters:
+  otlphttp/internal-collector:
+    endpoint: https://otel-collector.internal:4318
+    retry_on_failure: { enabled: true }
+    sending_queue: { enabled: true, queue_size: 10000 }
+
+service:
+  pipelines:
+    traces: [receivers, processors, exporters]
+    metrics: [receivers, processors, exporters]
+    logs: [receivers, processors, exporters]
+    </template>
+    <template id="file-routing" data-path="deploy/collector/tenant-routing.yml" data-language="yaml">
+tenants:
+  ubix:
+    credential: secret/ubix/otel
+    storage_tenant: ubix
+    max_series: 250000
+    log_rate_mb: 20
+  digiflow:
+    credential: secret/digiflow/otel
+    storage_tenant: digiflow
+    max_series: 250000
+    log_rate_mb: 20
+
+# Unknown credentials are rejected.
+# The gateway overwrites project.id.
+    </template>
+    <template id="file-storage" data-path="deploy/storage/storage-values.yml" data-language="yaml">
+metrics:
+  backend: mimir
+  replicas: 1
+  retention: 90d
+  object_store: s3://observability-metrics
+
+logs:
+  backend: loki
+  replicas: 1
+  retention: 14d
+  object_store: s3://observability-logs
+
+traces:
+  backend: tempo
+  replicas: 1
+  retention: 7d
+  object_store: s3://observability-traces
+    </template>
+    <template id="file-object" data-path="deploy/storage/object-storage.yml" data-language="yaml">
+bucket_policy:
+  observability-metrics:
+    versioning: enabled
+    encryption: kms
+    lifecycle: archive-after-90d
+  observability-logs:
+    versioning: enabled
+    encryption: kms
+    lifecycle: delete-after-30d
+  observability-traces:
+    versioning: enabled
+    encryption: kms
+    lifecycle: delete-after-14d
+
+# Use workload identity or short-lived credentials.
+    </template>
+    <template id="file-tls" data-path="deploy/tls/cert-manager.yml" data-language="yaml">
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: observability-ingestion
+spec:
+  secretName: observability-ingestion-tls
+  issuerRef:
+    name: internal-ca
+    kind: ClusterIssuer
+  dnsNames:
+    - otel-gateway.internal.example
+
+# Rotate certificates before expiry.
+    </template>
+    <template id="file-keycloak" data-path="identity/keycloak-realm.json" data-language="json">
+{
+  "realm": "observability",
+  "clients": ["grafana"],
+  "groups": [
+    "/obs-platform-admins",
+    "/ubix-viewers",
+    "/ubix-editors",
+    "/digiflow-viewers",
+    "/digiflow-editors"
+  ]
+}
+
+// Human access uses Keycloak OIDC.
+// Machine telemetry uses project credentials or mTLS.
+    </template>
+    <template id="file-rbac" data-path="identity/grafana-rbac.yml" data-language="yaml">
+groups:
+  /obs-platform-admins:
+    organizations:
+      observability-platform: Admin
+  /ubix-viewers:
+    organizations:
+      ubix: Viewer
+  /ubix-editors:
+    organizations:
+      ubix: Editor
+  /digiflow-viewers:
+    organizations:
+      digiflow: Viewer
+  /digiflow-editors:
+    organizations:
+      digiflow: Editor
+
+# Each project organization has project-specific datasources.
+    </template>
+    <template id="file-datasources" data-path="grafana/datasources.yml" data-language="yaml">
+apiVersion: 1
+datasources:
+  - name: ubix-metrics
+    type: prometheus
+    url: http://mimir:9009/prometheus
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: ubix
+
+  - name: ubix-logs
+    type: loki
+    url: http://loki:3100
+    secureJsonData:
+      httpHeaderValue1: ubix
+
+# Repeat per project. Never expose an unrestricted shared datasource.
+    </template>
+    <template id="file-dashboard" data-path="grafana/platform-overview.json" data-language="json">
+{
+  "title": "Platform overview",
+  "folder": "Platform",
+  "panels": [
+    "ingested telemetry rate",
+    "collector export failures",
+    "dropped spans and logs",
+    "query latency",
+    "storage capacity",
+    "tenant quota usage",
+    "OTLP request rate, errors, and latency",
+    "collector queue size and resource usage",
+    "tenant ingestion and dropped telemetry",
+    "gateway availability"
+  ],
+  "datasource": "platform-federated"
+}
+    </template>
+    <template id="file-alerts" data-path="grafana/platform-alerts.yml" data-language="yaml">
+groups:
+  - name: observability-platform
+    rules:
+      - alert: CollectorExportFailures
+        expr: rate(otelcol_exporter_send_failed_spans[5m]) / clamp_min(rate(otelcol_exporter_sent_spans[5m]), 1) > 0.05
+        for: 10m
+        labels: { severity: critical }
+      - alert: TenantQuotaNearLimit
+        expr: observability_tenant_quota_ratio > 0.8
+        for: 15m
+        labels: { severity: warning }
+      - alert: TelemetryStopped
+        expr: absent_over_time(otelcol_receiver_accepted_spans[15m])
+        for: 15m
+        labels: { severity: critical }
+      - alert: StorageBackendUnavailable
+        expr: up{job=~"loki|tempo|mimir"} == 0
+        for: 5m
+        labels: { severity: critical }
+    </template>
+    <template id="file-projects" data-path="projects/tenants.yml" data-language="yaml">
+projects:
+  - id: ubix
+    display_name: Ubix
+    owner_group: ubix-editors
+    grafana_org: ubix
+    environments: [dev, staging, production]
+  - id: digiflow
+    display_name: Digiflow
+    owner_group: digiflow-editors
+    grafana_org: digiflow
+    environments: [dev, staging, production]
+
+# Keep this registry as the source of truth for onboarding.
+    </template>
+    <template id="file-contract" data-path="projects/telemetry-contract.md" data-language="markdown">
+# Telemetry contract
+
+Every signal must include:
+- service.name
+- service.version
+- deployment.environment
+
+The platform derives project.id from authenticated project identity. Applications must not choose their tenant.
+- trace_id and span_id where applicable
+
+Rules:
+- Use normalized routes, never raw URLs.
+- Do not log tokens, passwords, payloads, or personal data.
+- Keep metric labels low-cardinality.
+- Propagate W3C trace context through HTTP and RabbitMQ.
+- Use sampling for high-volume traces.
+    </template>
+    <template id="file-runbook" data-path="runbooks/collector-outage.md" data-language="markdown">
+# Collector outage
+
+1. Check gateway and collector health.
+2. Check queue depth and exporter retry rate.
+3. Confirm the backend is reachable.
+4. Inspect dropped telemetry counters.
+5. Restore capacity or restart the failed replica.
+6. Verify ingestion from each affected project.
+7. Record data loss, duration, and corrective action.
+
+The platform must fail visibly. Silent telemetry loss is an incident.
+    </template>
+    <template id="file-onboarding" data-path="runbooks/project-onboarding.md" data-language="markdown">
+# Project onboarding
+
+1. Register ownership and environments.
+2. Create Keycloak groups and Grafana organization.
+3. Create project machine credentials.
+4. Issue collector configuration.
+5. Validate metrics, logs, and traces from one service.
+6. Test RabbitMQ, Camunda, and Angular traces.
+7. Test quotas, rotation, PII scrubbing, and isolation.
+8. Enable dashboards and alerts.
+    </template>
+  </div>
+
+  <script>
+    const buttons = document.querySelectorAll(".file");
+    const path = document.getElementById("filePath");
+    const language = document.getElementById("fileLanguage");
+    const content = document.getElementById("fileContent");
+
+    function selectFile(key) {
+      const template = document.getElementById("file-" + key);
+      if (!template) return;
+      path.textContent = template.dataset.path;
+      language.textContent = template.dataset.language;
+      content.textContent = template.content.textContent.trim();
+      buttons.forEach((button) => button.classList.toggle("active", button.dataset.file === key));
+    }
+
+    buttons.forEach((button) => button.addEventListener("click", () => selectFile(button.dataset.file)));
+    selectFile("compose");
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+bucket_policy:
+  observability-metrics:
+    versioning: false
+    encryption: kms
+    lifecycle: archive-after-90d
+  observability-logs:
+    versioning: false
+    encryption: kms
+    lifecycle: delete-after-30d
+  observability-traces:
+    versioning: false
+    encryption: kms
+    lifecycle: delete-after-14d
+
+# Use workload identity or short-lived credentials.

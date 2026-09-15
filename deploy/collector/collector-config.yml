@@ -1,0 +1,25 @@
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+
+processors:
+  memory_limiter: { limit_mib: 2048 }
+  batch: {}
+  transform/project-identity:
+    # Set project.id from authenticated connection context.
+  filter/pii:
+    # Replace secrets, tokens, account numbers, and payloads.
+
+exporters:
+  otlphttp/internal-collector:
+    endpoint: https://otel-collector.internal:4318
+    retry_on_failure: { enabled: true }
+    sending_queue: { enabled: true, queue_size: 10000 }
+
+service:
+  pipelines:
+    traces: [receivers, processors, exporters]
+    metrics: [receivers, processors, exporters]
+    logs: [receivers, processors, exporters]
