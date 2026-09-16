@@ -26,16 +26,24 @@ get_env_value() {
   val="$(grep -E "^[[:space:]]*(export[[:space:]]+)?$key=" "$1" 2>/dev/null | sed -n '$p' | sed -E "s/^[[:space:]]*(export[[:space:]]+)?$key=//" | tr -d '\r' | sed -E "s/^[\"']//; s/[\"'][[:space:]]*(#.*)?$//; s/[[:space:]]*(#.*)?$//")"
   printf '%s' "$val"
 }
-UBIX_OTEL_TOKEN="$(get_env_value "$ROOT/.env" UBIX_OTEL_TOKEN)"
-DIGIFLOW_OTEL_TOKEN="$(get_env_value "$ROOT/.env" DIGIFLOW_OTEL_TOKEN)"
+KEVE_UBIX_OTEL_TOKEN="$(get_env_value "$ROOT/.env" KEVE_UBIX_OTEL_TOKEN)"
+KEVE_DIGIFLOW_OTEL_TOKEN="$(get_env_value "$ROOT/.env" KEVE_DIGIFLOW_OTEL_TOKEN)"
+BCI_UBIX_OTEL_TOKEN="$(get_env_value "$ROOT/.env" BCI_UBIX_OTEL_TOKEN)"
+BCI_DIGIFLOW_OTEL_TOKEN="$(get_env_value "$ROOT/.env" BCI_DIGIFLOW_OTEL_TOKEN)"
 KEYCLOAK_GRAFANA_CLIENT_SECRET="$(get_env_value "$ROOT/.env" KEYCLOAK_GRAFANA_CLIENT_SECRET)"
-[ -z "${UBIX_OTEL_TOKEN:-}" ] && UBIX_OTEL_TOKEN="placeholder-for-down"
-[ -z "${DIGIFLOW_OTEL_TOKEN:-}" ] && DIGIFLOW_OTEL_TOKEN="placeholder-for-down"
+[ -z "${KEVE_UBIX_OTEL_TOKEN:-}" ] && KEVE_UBIX_OTEL_TOKEN="placeholder-for-down"
+[ -z "${KEVE_DIGIFLOW_OTEL_TOKEN:-}" ] && KEVE_DIGIFLOW_OTEL_TOKEN="placeholder-for-down"
+[ -z "${BCI_UBIX_OTEL_TOKEN:-}" ] && BCI_UBIX_OTEL_TOKEN="placeholder-for-down"
+[ -z "${BCI_DIGIFLOW_OTEL_TOKEN:-}" ] && BCI_DIGIFLOW_OTEL_TOKEN="placeholder-for-down"
 [ -z "${KEYCLOAK_GRAFANA_CLIENT_SECRET:-}" ] && KEYCLOAK_GRAFANA_CLIENT_SECRET="placeholder-for-down"
-export UBIX_OTEL_TOKEN DIGIFLOW_OTEL_TOKEN KEYCLOAK_GRAFANA_CLIENT_SECRET
+export KEVE_UBIX_OTEL_TOKEN KEVE_DIGIFLOW_OTEL_TOKEN BCI_UBIX_OTEL_TOKEN BCI_DIGIFLOW_OTEL_TOKEN KEYCLOAK_GRAFANA_CLIENT_SECRET
 
 # shellcheck disable=SC2086
+docker compose -f "$RETAIL_DIR/docker-compose.bci.yml" --env-file "$RETAIL_DIR/.env.bci" down $DOWN_FLAGS
+# shellcheck disable=SC2086
 docker compose -f "$RETAIL_DIR/docker-compose.yml" down $DOWN_FLAGS
+# shellcheck disable=SC2086
+docker compose -f "$INS_DIR/docker-compose.bci.yml" --env-file "$INS_DIR/.env.bci" down $DOWN_FLAGS
 # shellcheck disable=SC2086
 docker compose -f "$INS_DIR/docker-compose.yml" down $DOWN_FLAGS
 # shellcheck disable=SC2086

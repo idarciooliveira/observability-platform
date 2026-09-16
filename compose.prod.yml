@@ -1,20 +1,26 @@
 services:
-  # Trust boundary: authenticates project Bearer tokens, maps each credential
-  # to its tenant, and proxies OTLP/HTTP to the tenant's private pipeline.
+  # Trust boundary: authenticates instance Bearer tokens, maps each credential
+  # to its instance, and proxies OTLP/HTTP to the instance's private pipeline.
   # This is the ONLY service that publishes the ingestion ports.
+  # 4 instances (keve_ubix, keve_digiflow, bci_ubix, bci_digiflow),
+  # 2 storage tenants (keve, bci via X-Scope-OrgID on shared company exporters).
   otel-gateway:
     build: ./gateway
     restart: unless-stopped
     ports:
       - "4318:4318"
     environment:
-      GATEWAY_TENANTS: ubix,digiflow
+      GATEWAY_TENANTS: keve_ubix,keve_digiflow,bci_ubix,bci_digiflow
       GATEWAY_LISTEN_PORT: "4318"
       GATEWAY_METRICS_PORT: "9464"
-      UBIX_OTEL_TOKEN: ${UBIX_OTEL_TOKEN:?UBIX_OTEL_TOKEN is not set}
-      DIGIFLOW_OTEL_TOKEN: ${DIGIFLOW_OTEL_TOKEN:?DIGIFLOW_OTEL_TOKEN is not set}
-      UBIX_UPSTREAM: http://otel-collector:4319
-      DIGIFLOW_UPSTREAM: http://otel-collector:4320
+      KEVE_UBIX_OTEL_TOKEN: ${KEVE_UBIX_OTEL_TOKEN:?KEVE_UBIX_OTEL_TOKEN is not set}
+      KEVE_DIGIFLOW_OTEL_TOKEN: ${KEVE_DIGIFLOW_OTEL_TOKEN:?KEVE_DIGIFLOW_OTEL_TOKEN is not set}
+      BCI_UBIX_OTEL_TOKEN: ${BCI_UBIX_OTEL_TOKEN:?BCI_UBIX_OTEL_TOKEN is not set}
+      BCI_DIGIFLOW_OTEL_TOKEN: ${BCI_DIGIFLOW_OTEL_TOKEN:?BCI_DIGIFLOW_OTEL_TOKEN is not set}
+      KEVE_UBIX_UPSTREAM: http://otel-collector:4319
+      KEVE_DIGIFLOW_UPSTREAM: http://otel-collector:4320
+      BCI_UBIX_UPSTREAM: http://otel-collector:4321
+      BCI_DIGIFLOW_UPSTREAM: http://otel-collector:4322
     depends_on:
       otel-collector:
         condition: service_started
@@ -38,7 +44,7 @@ services:
       - otel-gateway
       - mimir
 
-  # Internal collector: per-tenant pipelines only. No published ports;
+  # Internal collector: per-instance pipelines only. No published ports;
   # reachable solely via the compose network (otel-gateway -> otel-collector).
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.135.0

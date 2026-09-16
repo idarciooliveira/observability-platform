@@ -1,31 +1,31 @@
-name: insurance-direct-keve
+# Variant B: insurance-direct reporting as bci_ubix (company=bci, project=ubix).
+# Same app as docker-compose.yml (variant A = keve_ubix) with a distinct
+# credential, distinct host ports (8093/8092/5443), distinct containers and
+# a distinct network so both variants run side by side.
+# Usage: docker compose -f docker-compose.bci.yml --env-file .env.bci up -d --build
+name: insurance-direct-bci
 services:
   insurance-api:
     build:
       context: ./insurance-api
       dockerfile: Dockerfile
-    container_name: example-insurance-api-keve
+    container_name: example-insurance-api-bci
     ports:
-      - "${INSURANCE_API_PORT:-8083}:8080"
+      - "${INSURANCE_API_PORT:-8093}:8080"
     depends_on:
       postgres:
         condition: service_healthy
       risk-service:
         condition: service_started
     networks:
-      - insurance-direct-keve
+      - insurance-direct-bci
     extra_hosts:
-      # No-op on Docker Desktop (Win/Mac); required on native Linux Engine
-      # so host.docker.internal resolves to the host gateway.
       - "host.docker.internal:host-gateway"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-insurance_db}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-insurance_user}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-insurance_pass}
       RISK_SERVICE_URL: http://risk-service:8082
-      # Variant B (direct OTLP): app -> platform gateway, no local collector.
-      # Gateway serves OTLP/HTTP only -> must be http/protobuf, never grpc.
-      # Endpoint is the platform compose.local.yml gateway via Docker internal.
       OTEL_SERVICE_NAME: insurance-api
       OTEL_RESOURCE_ATTRIBUTES: service.namespace=insurance,deployment.environment=${ENV:-dev}
       OTEL_TRACES_EXPORTER: otlp
@@ -34,22 +34,21 @@ services:
       OTEL_METRIC_EXPORT_INTERVAL: 15000
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4318}
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
-      # keve_ubix instance credential from observability-platform/.env (KEVE_UBIX_OTEL_TOKEN).
-      # Platform derives tenant.id=keve + project.id=ubix from this credential
-      # and overwrites any client-supplied values. Do NOT set tenant.id /
-      # project.id / X-Scope-OrgID here.
-      OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer ${KEVE_UBIX_OTEL_TOKEN:?KEVE_UBIX_OTEL_TOKEN must be set}
+      # bci_ubix instance credential (BCI_UBIX_OTEL_TOKEN).
+      # Platform derives tenant.id=bci + project.id=ubix. Do NOT set
+      # tenant.id / project.id / X-Scope-OrgID here.
+      OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer ${BCI_UBIX_OTEL_TOKEN:?BCI_UBIX_OTEL_TOKEN must be set}
       OTEL_INSTRUMENTATION_MICROMETER_ENABLED: "true"
 
   risk-service:
     build:
       context: ./risk-service
       dockerfile: Dockerfile
-    container_name: example-insurance-risk-service-keve
+    container_name: example-insurance-risk-service-bci
     ports:
-      - "${RISK_SERVICE_PORT:-8082}:8082"
+      - "${RISK_SERVICE_PORT:-8092}:8082"
     networks:
-      - insurance-direct-keve
+      - insurance-direct-bci
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -61,24 +60,24 @@ services:
       OTEL_METRIC_EXPORT_INTERVAL: 15000
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4318}
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
-      OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer ${KEVE_UBIX_OTEL_TOKEN:?KEVE_UBIX_OTEL_TOKEN must be set}
+      OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer ${BCI_UBIX_OTEL_TOKEN:?BCI_UBIX_OTEL_TOKEN must be set}
       OTEL_INSTRUMENTATION_MICROMETER_ENABLED: "true"
       CHAOS_LATENCY_MS: ${CHAOS_LATENCY_MS:-0}
       CHAOS_REJECT_RATE: ${CHAOS_REJECT_RATE:-0}
 
   postgres:
     image: postgres:16-alpine
-    container_name: example-insurance-postgres-keve
+    container_name: example-insurance-postgres-bci
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-insurance_db}
       POSTGRES_USER: ${POSTGRES_USER:-insurance_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-insurance_pass}
     ports:
-      - "${POSTGRES_PORT:-5433}:5432"
+      - "${POSTGRES_PORT:-5443}:5432"
     volumes:
-      - insurance-postgres-data-keve:/var/lib/postgresql/data
+      - insurance-postgres-data-bci:/var/lib/postgresql/data
     networks:
-      - insurance-direct-keve
+      - insurance-direct-bci
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-insurance_user} -d ${POSTGRES_DB:-insurance_db}"]
       interval: 5s
@@ -86,8 +85,8 @@ services:
       retries: 10
 
 volumes:
-  insurance-postgres-data-keve:
+  insurance-postgres-data-bci:
 
 networks:
-  insurance-direct-keve:
-    name: insurance-direct-keve
+  insurance-direct-bci:
+    name: insurance-direct-bci

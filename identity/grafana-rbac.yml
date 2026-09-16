@@ -1,18 +1,53 @@
+# Grafana RBAC: flat Keycloak groups + GF_AUTH_GENERIC_OAUTH_ORG_MAPPING.
+#
+# Grafana orgs: Main:1, keve_ubix:2, keve_digiflow:3, bci_ubix:4, bci_digiflow:5.
+# - obs-platform-admins -> Admin 1,2,3,4,5 (Platform Team, unchanged)
+# - keve-admins -> Admin 2,3 ; bci-admins -> Admin 4,5 (company-admin)
+# - keve-ubix-viewers/editors -> Viewer/Editor 2 only, etc. (8 project groups)
+# - cross-company lead, e.g. Domingos: member of keve-digiflow-editors +
+#   bci-digiflow-editors -> Editor 3+4 only.
+# Viewers: no Explore/create, dashboard-only with fixed project.id variable.
+# Project-level is soft; company-level is the hard security boundary.
 groups:
   /obs-platform-admins:
     organizations:
-      observability-platform: Admin
-  /ubix-viewers:
+      Main Org.: Admin
+      keve_ubix: Admin
+      keve_digiflow: Admin
+      bci_ubix: Admin
+      bci_digiflow: Admin
+  /keve-admins:
     organizations:
-      ubix: Viewer
-  /ubix-editors:
+      keve_ubix: Admin
+      keve_digiflow: Admin
+  /bci-admins:
     organizations:
-      ubix: Editor
-  /digiflow-viewers:
+      bci_ubix: Admin
+      bci_digiflow: Admin
+  /keve-ubix-viewers:
     organizations:
-      digiflow: Viewer
-  /digiflow-editors:
+      keve_ubix: Viewer
+  /keve-ubix-editors:
     organizations:
-      digiflow: Editor
+      keve_ubix: Editor
+  /keve-digiflow-viewers:
+    organizations:
+      keve_digiflow: Viewer
+  /keve-digiflow-editors:
+    organizations:
+      keve_digiflow: Editor
+  /bci-ubix-viewers:
+    organizations:
+      bci_ubix: Viewer
+  /bci-ubix-editors:
+    organizations:
+      bci_ubix: Editor
+  /bci-digiflow-viewers:
+    organizations:
+      bci_digiflow: Viewer
+  /bci-digiflow-editors:
+    organizations:
+      bci_digiflow: Editor
 
-# Each project organization has project-specific datasources.
+# Each instance organization has instance-specific datasources sharing its
+# company header, plus a fixed project.id dashboard filter (soft).

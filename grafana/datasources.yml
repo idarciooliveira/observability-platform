@@ -1,10 +1,31 @@
 apiVersion: 1
 
-# Platform Org (1) owns platform telemetry. Project orgs own only their own
-# tenant telemetry and never receive the platform datasource.
+# Option B (soft project isolation, proxy-ready):
+#   Storage isolation is per COMPANY (X-Scope-OrgID = keve | bci).
+#   Each instance org (keve_ubix:2, keve_digiflow:3, bci_ubix:4, bci_digiflow:5)
+#   owns 3 datasources pointing at its COMPANY header. Project isolation
+#   inside a company is SOFT: dashboards carry a fixed project.id variable;
+#   viewers get no Explore/create. The company is the hard security boundary.
+#   Both tenant.id + project.id are stored, so a future read-proxy needs no
+#   re-ingestion.
+# Platform Org (1) owns platform telemetry. Instance orgs never receive it.
+# The ubix-*/digiflow-* entries below remove the orphaned pre-Option-B
+# datasources (they pointed at the retired per-project OrgIDs).
 deleteDatasources:
   - name: platform-metrics
     orgId: 1
+  - name: ubix-metrics
+    orgId: 2
+  - name: ubix-logs
+    orgId: 2
+  - name: ubix-traces
+    orgId: 2
+  - name: digiflow-metrics
+    orgId: 3
+  - name: digiflow-logs
+    orgId: 3
+  - name: digiflow-traces
+    orgId: 3
 
 datasources:
   - name: platform-metrics
@@ -17,58 +38,114 @@ datasources:
     secureJsonData:
       httpHeaderValue1: platform
 
-  - name: ubix-metrics
+  - name: keve_ubix-metrics
     type: prometheus
     orgId: 2
     url: http://mimir:9009/prometheus
     jsonData:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
-      httpHeaderValue1: ubix
+      httpHeaderValue1: keve
 
-  - name: ubix-logs
+  - name: keve_ubix-logs
     type: loki
     orgId: 2
     url: http://loki:3100
     jsonData:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
-      httpHeaderValue1: ubix
+      httpHeaderValue1: keve
 
-  - name: digiflow-metrics
+  - name: keve_ubix-traces
+    type: tempo
+    orgId: 2
+    url: http://tempo:3200
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: keve
+
+  - name: keve_digiflow-metrics
     type: prometheus
     orgId: 3
     url: http://mimir:9009/prometheus
     jsonData:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
-      httpHeaderValue1: digiflow
+      httpHeaderValue1: keve
 
-  - name: digiflow-logs
+  - name: keve_digiflow-logs
     type: loki
     orgId: 3
     url: http://loki:3100
     jsonData:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
-      httpHeaderValue1: digiflow
+      httpHeaderValue1: keve
 
-  - name: ubix-traces
-    type: tempo
-    orgId: 2
-    url: http://tempo:3200
-    jsonData:
-      httpHeaderName1: X-Scope-OrgID
-    secureJsonData:
-      httpHeaderValue1: ubix
-
-  - name: digiflow-traces
+  - name: keve_digiflow-traces
     type: tempo
     orgId: 3
     url: http://tempo:3200
     jsonData:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
-      httpHeaderValue1: digiflow
+      httpHeaderValue1: keve
 
-# Repeat per project. Never expose an unrestricted shared datasource.
+  - name: bci_ubix-metrics
+    type: prometheus
+    orgId: 4
+    url: http://mimir:9009/prometheus
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: bci
+
+  - name: bci_ubix-logs
+    type: loki
+    orgId: 4
+    url: http://loki:3100
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: bci
+
+  - name: bci_ubix-traces
+    type: tempo
+    orgId: 4
+    url: http://tempo:3200
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: bci
+
+  - name: bci_digiflow-metrics
+    type: prometheus
+    orgId: 5
+    url: http://mimir:9009/prometheus
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: bci
+
+  - name: bci_digiflow-logs
+    type: loki
+    orgId: 5
+    url: http://loki:3100
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: bci
+
+  - name: bci_digiflow-traces
+    type: tempo
+    orgId: 5
+    url: http://tempo:3200
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: bci
+
+# Repeat per instance. Never expose an unrestricted shared datasource.
+# Project filter (soft) is enforced at the dashboard/variable layer, and
+# later by the Phase 2 read-proxy — not by the datasource header.

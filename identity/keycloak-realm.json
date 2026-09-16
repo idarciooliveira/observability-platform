@@ -3,12 +3,21 @@
   "clients": ["grafana"],
   "groups": [
     "/obs-platform-admins",
-    "/ubix-viewers",
-    "/ubix-editors",
-    "/digiflow-viewers",
-    "/digiflow-editors"
+    "/keve-admins",
+    "/bci-admins",
+    "/keve-ubix-viewers",
+    "/keve-ubix-editors",
+    "/keve-digiflow-viewers",
+    "/keve-digiflow-editors",
+    "/bci-ubix-viewers",
+    "/bci-ubix-editors",
+    "/bci-digiflow-viewers",
+    "/bci-digiflow-editors"
   ]
 }
 
 // Human access uses Keycloak OIDC.
-// Machine telemetry uses project credentials or mTLS.
+// Machine telemetry uses instance credentials (1 credential -> 1 pipeline).
+// RBAC: obs-platform-admins -> Admin 1-5; keve-admins -> Admin 2,3;
+// bci-admins -> Admin 4,5; project groups -> Viewer/Editor in their org only.
+// Project-level is SOFT (default project.id filter); company is the hard boundary.
