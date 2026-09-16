@@ -6,43 +6,60 @@ central gateway (`https://ingest.observability.example.com`, OTLP/HTTP +
 Bearer token) with **no local collector** in between.
 
 Platform side is identical to Variant A — only the project side differs.
+The credential is per INSTANCE (`<company>_<project>`); the example below
+onboards `bci_onboarding` (company `bci`, project `onboarding`).
 
 ## 1. Platform side (one PR)
 
 ```bash
-python3 scripts/add-tenant.py onboarding --dry-run
-# tenant=onboarding port=4321 grafana_org_id=4 token_env=ONBOARDING_OTEL_TOKEN
+python3 scripts/add-instance.py bci onboarding --dry-run
+# instance=bci_onboarding company=bci project=onboarding port=4323 grafana_org_id=6 token_env=BCI_ONBOARDING_OTEL_TOKEN
 # would change: projects/tenants.yml,
 #   deploy/collector/tenant-routing.yml,
-#   deploy/collector/collector-config.yml, compose.prod.yml, .env.example,
-#   grafana/datasources.yml
+#   deploy/collector/collector-config.yml, compose.prod.yml, compose.local.yml,
+#   .env.example, grafana/datasources.yml
 
-python3 scripts/add-tenant.py onboarding
-# prints: ONBOARDING_OTEL_TOKEN=<hex> -> secret manager, never git
+python3 scripts/add-instance.py bci onboarding
+# prints: BCI_ONBOARDING_OTEL_TOKEN=<hex> -> secret manager, never git
 ```
 
-Resulting PR touches 7 files (port `4321` = next free after
-`4319=ubix`, `4320=digiflow`; Grafana org `4` = next free after
-`1=Main Org.`, `2=ubix`, `3=digiflow`):
+Resulting PR touches 7 files (port `4323` = next free after
+`4319=keve_ubix`, `4320=keve_digiflow`, `4321=bci_ubix`, `4322=bci_digiflow`;
+Grafana org `6` = next free after `1=Main Org.`, `2=keve_ubix`,
+`3=keve_digiflow`, `4=bci_ubix`, `5=bci_digiflow`):
 
-- `projects/tenants.yml` — `id: onboarding`, `owner_group: onboarding-editors`, `grafana_org: onboarding`
-- `deploy/collector/tenant-routing.yml` — `token_env: ONBOARDING_OTEL_TOKEN`, `collector_upstream: http://otel-collector:4321`
-- `deploy/collector/collector-config.yml` — `otlp/onboarding` receiver (`0.0.0.0:4321`), `transform/onboarding_identity`, 3 exporters (`X-Scope-OrgID: onboarding`), 3 pipelines
-- `compose.prod.yml` — `GATEWAY_TENANTS: ubix,digiflow,onboarding` + `ONBOARDING_OTEL_TOKEN` / `ONBOARDING_UPSTREAM` + `ORG_MAPPING` entries (`onboarding-viewers:4:Viewer, onboarding-editors:4:Editor`)
-- `.env.example` — `ONBOARDING_OTEL_TOKEN=changeme-onboarding-token`
-- `grafana/datasources.yml` — `onboarding-metrics/logs/traces` with `orgId: 4`
+- `projects/tenants.yml` — tenant `bci` gains project `onboarding`; new
+  instance `bci_onboarding` (`grafana_org: bci_onboarding`)
+- `deploy/collector/tenant-routing.yml` — `tenant: bci_onboarding`,
+  `project: onboarding`, `storage_tenant: bci`,
+  `token_env: BCI_ONBOARDING_OTEL_TOKEN`,
+  `collector_upstream: http://otel-collector:4323`
+- `deploy/collector/collector-config.yml` — `otlp/bci_onboarding` receiver
+  (`0.0.0.0:4323`), `transform/bci_onboarding_identity` (sets BOTH
+  `tenant.id=bci` + `project.id=onboarding`), reuse of shared
+  `otlphttp/{mimir,loki,tempo}_bci` exporters (`X-Scope-OrgID: bci`),
+  3 pipelines
+- `compose.prod.yml` + `compose.local.yml` — `GATEWAY_TENANTS` +=
+  `bci_onboarding` + `BCI_ONBOARDING_OTEL_TOKEN` / `BCI_ONBOARDING_UPSTREAM`
+  + `ORG_MAPPING` entries
+  (`bci-onboarding-viewers:4:Viewer, bci-onboarding-editors:4:Editor`)
+- `.env.example` — `BCI_ONBOARDING_OTEL_TOKEN=changeme-bci_onboarding-token`
+- `grafana/datasources.yml` — unchanged (`bci` company org 3 already owns
+  `bci-metrics/logs/traces` with header `bci`)
 
-Then the manual Grafana step (orgs cannot be file-provisioned): create the
-`onboarding` org against the running Grafana — it must get id `4`, else
-re-run with `--grafana-org-id <actual-id>` — create the Keycloak
-`onboarding-viewers` / `onboarding-editors` groups, redeploy, and have
-users log out/in. Full checklist: Variant A §1b.
+Then the manual Grafana step: no new org needed (`bci` org 4 is reused) —
+create the Keycloak `bci-onboarding-viewers` / `bci-onboarding-editors`
+groups, add an `onboarding` folder with the `project.id` filter in the
+`bci` org, redeploy, and have users log out/in. (A brand-new company
+would need its org created against the running Grafana — it must get the
+script's `--grafana-org-id`, else re-run with the actual id.)
+Full checklist: Variant A §1b.
 
 Deploy and test:
 
 ```bash
 python3 -m pytest gateway/tests/ tests/ -v
-ONBOARDING_OTEL_TOKEN=<token> docker compose -f compose.prod.yml up -d --build
+BCI_ONBOARDING_OTEL_TOKEN=<token> docker compose -f compose.prod.yml up -d --build
 ```
 
 ## 2. VPS side (their machine)
@@ -57,7 +74,7 @@ export OTEL_SERVICE_VERSION=0.1.0
 export OTEL_DEPLOYMENT_ENVIRONMENT=production
 export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 export OTEL_EXPORTER_OTLP_ENDPOINT=https://ingest.observability.example.com
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer ${ONBOARDING_OTEL_TOKEN}"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer ${BCI_ONBOARDING_OTEL_TOKEN}"
 
 java -javaagent:opentelemetry-javaagent.jar -jar onboarding.jar
 ```
@@ -68,9 +85,10 @@ Notes:
   `http/protobuf`, never gRPC.
 - Every request must carry `Authorization: Bearer <token>`; missing/unknown
   credentials get `401` and are never forwarded.
-- Do **not** set `project.id` or `X-Scope-OrgID` in the app: the gateway
-  strips tenant headers and the `transform/onboarding_identity` processor
-  overwrites `project.id=onboarding` as defense in depth.
+- Do **not** set `tenant.id`, `project.id` or `X-Scope-OrgID` in the app:
+  the gateway strips tenant headers and the
+  `transform/bci_onboarding_identity` processor overwrites
+  `tenant.id=bci` + `project.id=onboarding` as defense in depth.
 - Keep the telemetry contract: `service.name`, `service.version`,
   `deployment.environment` on every signal; normalized routes (never raw
   URLs); low-cardinality metric labels; no tokens, passwords, payloads, or
@@ -87,17 +105,17 @@ Notes:
 curl -s -o /dev/null -w '%{http_code}\n' \
   https://ingest.observability.example.com/v1/logs \
   -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $ONBOARDING_OTEL_TOKEN" \
+  -H "Authorization: Bearer $BCI_ONBOARDING_OTEL_TOKEN" \
   -d '{"resourceLogs":[{"resource":{"attributes":[
         {"key":"service.name","value":{"stringValue":"onboarding"}}]},
       "scopeLogs":[{"logRecords":[{"body":{"stringValue":"hi"}}]}]}]}'
 
-# Isolation: onboarding credential + project.id=ubix must still land on onboarding
-# (check Grafana org=onboarding: Explore shows only onboarding-*; nothing
-#  may appear under the ubix org, and vice versa)
-# Gateway log: tenant=onboarding ... -> http://otel-collector:4321/v1/logs
+# Isolation: bci_onboarding credential + tenant.id=keve/project.id=ubix must
+# still land on bci_onboarding (check Grafana org=bci_onboarding: Explore
+# shows only bci_onboarding-*; nothing may appear under the keve orgs)
+# Gateway log: tenant=bci_onboarding ... -> http://otel-collector:4323/v1/logs
 ```
 
 Then confirm one metric, one log, and one trace for
-`service.name=onboarding` in the `onboarding` Grafana org, and enable
+`service.name=onboarding` in the `bci_onboarding` Grafana org, and enable
 dashboards/alerts.

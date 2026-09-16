@@ -4,10 +4,14 @@
 #   curl http://localhost:4318/healthz        # gateway
 #   open http://localhost:3000                # grafana (admin/admin)
 # External apps (other compose networks on the same host) connect over
-# http://host.docker.internal:4318 with their tenant Bearer token
+# http://host.docker.internal:4318 with their instance Bearer token
 # (see projects/collector-template.yml + examples/). On Linux without
 # host.docker.internal, use the host bridge/LAN IP with the same port.
 # This file is for LOCAL DEMO ONLY. Production stays on compose.prod.yml.
+# The examples startup script uses the optional `bootstrap` profile for Grafana
+# organization setup, so no second Compose override file is needed.
+# 4 instances (keve_ubix :4319, keve_digiflow :4320, bci_ubix :4321,
+# bci_digiflow :4322) sharing 2 company exporters (keve, bci).
 services:
   otel-gateway:
     build: ./gateway
@@ -15,13 +19,17 @@ services:
     ports:
       - "4318:4318"
     environment:
-      GATEWAY_TENANTS: ubix,digiflow
+      GATEWAY_TENANTS: keve_ubix,keve_digiflow,bci_ubix,bci_digiflow
       GATEWAY_LISTEN_PORT: "4318"
       GATEWAY_METRICS_PORT: "9464"
-      UBIX_OTEL_TOKEN: ${UBIX_OTEL_TOKEN:?UBIX_OTEL_TOKEN is not set}
-      DIGIFLOW_OTEL_TOKEN: ${DIGIFLOW_OTEL_TOKEN:?DIGIFLOW_OTEL_TOKEN is not set}
-      UBIX_UPSTREAM: http://otel-collector:4319
-      DIGIFLOW_UPSTREAM: http://otel-collector:4320
+      KEVE_UBIX_OTEL_TOKEN: ${KEVE_UBIX_OTEL_TOKEN:?KEVE_UBIX_OTEL_TOKEN is not set}
+      KEVE_DIGIFLOW_OTEL_TOKEN: ${KEVE_DIGIFLOW_OTEL_TOKEN:?KEVE_DIGIFLOW_OTEL_TOKEN is not set}
+      BCI_UBIX_OTEL_TOKEN: ${BCI_UBIX_OTEL_TOKEN:?BCI_UBIX_OTEL_TOKEN is not set}
+      BCI_DIGIFLOW_OTEL_TOKEN: ${BCI_DIGIFLOW_OTEL_TOKEN:?BCI_DIGIFLOW_OTEL_TOKEN is not set}
+      KEVE_UBIX_UPSTREAM: http://otel-collector:4319
+      KEVE_DIGIFLOW_UPSTREAM: http://otel-collector:4320
+      BCI_UBIX_UPSTREAM: http://otel-collector:4321
+      BCI_DIGIFLOW_UPSTREAM: http://otel-collector:4322
     depends_on:
       otel-collector:
         condition: service_started
@@ -71,6 +79,38 @@ services:
       - tempo-data:/var/tempo
 
   grafana:
+    x-grafana-common: &grafana-common
+      image: grafana/grafana:12.1.0
+      restart: unless-stopped
+      ports:
+        - "3000:3000"
+      environment:
+        GF_SECURITY_ADMIN_USER: admin
+        GF_SECURITY_ADMIN_PASSWORD: admin
+        GF_SERVER_ROOT_URL: http://localhost:3000/
+        GF_USERS_ALLOW_SIGN_UP: "true"
+        GF_USERS_AUTO_ASSIGN_ORG: "false"
+        GF_AUTH_ANONYMOUS_ENABLED: "false"
+        GF_AUTH_OAUTH_AUTO_LOGIN: "false"
+        GF_AUTH_SIGNOUT_REDIRECT_URL: http://localhost:8090/realms/observability/protocol/openid-connect/logout?client_id=grafana&post_logout_redirect_uri=http://localhost:3000/login
+        GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
+        GF_AUTH_GENERIC_OAUTH_NAME: Keycloak
+        GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP: "true"
+        GF_AUTH_GENERIC_OAUTH_CLIENT_ID: grafana
+        GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: ${KEYCLOAK_GRAFANA_CLIENT_SECRET:?KEYCLOAK_GRAFANA_CLIENT_SECRET is not set}
+        GF_AUTH_GENERIC_OAUTH_SCOPES: openid email profile
+        GF_AUTH_GENERIC_OAUTH_AUTH_URL: http://localhost:8090/realms/observability/protocol/openid-connect/auth
+        GF_AUTH_GENERIC_OAUTH_TOKEN_URL: http://keycloak:8080/realms/observability/protocol/openid-connect/token
+        GF_AUTH_GENERIC_OAUTH_API_URL: http://keycloak:8080/realms/observability/protocol/openid-connect/userinfo
+        GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH: "contains(groups[*], 'obs-platform-admins') && 'GrafanaAdmin' || contains(groups[*], 'keve-admins') && 'Editor' || contains(groups[*], 'bci-admins') && 'Editor' || contains(groups[*], 'keve-ubix-editors') && 'Editor' || contains(groups[*], 'keve-digiflow-editors') && 'Editor' || contains(groups[*], 'bci-ubix-editors') && 'Editor' || contains(groups[*], 'bci-digiflow-editors') && 'Editor' || 'Viewer'"
+        GF_AUTH_GENERIC_OAUTH_ALLOW_ASSIGN_GRAFANA_ADMIN: "true"
+        GF_AUTH_GENERIC_OAUTH_ORG_ATTRIBUTE_PATH: groups[]
+        GF_AUTH_GENERIC_OAUTH_ORG_MAPPING: "obs-platform-admins:2:Admin, obs-platform-admins:3:Admin, obs-platform-admins:4:Admin, keve-admins:3:Admin, bci-admins:4:Admin, keve-ubix-viewers:3:Viewer, keve-ubix-editors:3:Editor, keve-digiflow-viewers:3:Viewer, keve-digiflow-editors:3:Editor, bci-ubix-viewers:4:Viewer, bci-ubix-editors:4:Editor, bci-digiflow-viewers:4:Viewer, bci-digiflow-editors:4:Editor"
+      depends_on:
+        - mimir
+        - loki
+        - tempo
+        - keycloak
     image: grafana/grafana:12.1.0
     restart: unless-stopped
     ports:
@@ -93,14 +133,16 @@ services:
       GF_AUTH_GENERIC_OAUTH_AUTH_URL: http://localhost:8090/realms/observability/protocol/openid-connect/auth
       GF_AUTH_GENERIC_OAUTH_TOKEN_URL: http://keycloak:8080/realms/observability/protocol/openid-connect/token
       GF_AUTH_GENERIC_OAUTH_API_URL: http://keycloak:8080/realms/observability/protocol/openid-connect/userinfo
-      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH: "contains(groups[*], 'obs-platform-admins') && 'GrafanaAdmin' || contains(groups[*], 'ubix-editors') && 'Editor' || contains(groups[*], 'digiflow-editors') && 'Editor' || 'Viewer'"
+      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH: "contains(groups[*], 'obs-platform-admins') && 'GrafanaAdmin' || contains(groups[*], 'keve-admins') && 'Editor' || contains(groups[*], 'bci-admins') && 'Editor' || contains(groups[*], 'keve-ubix-editors') && 'Editor' || contains(groups[*], 'keve-digiflow-editors') && 'Editor' || contains(groups[*], 'bci-ubix-editors') && 'Editor' || contains(groups[*], 'bci-digiflow-editors') && 'Editor' || 'Viewer'"
       GF_AUTH_GENERIC_OAUTH_ALLOW_ASSIGN_GRAFANA_ADMIN: "true"
       GF_AUTH_GENERIC_OAUTH_ORG_ATTRIBUTE_PATH: groups[]
-      GF_AUTH_GENERIC_OAUTH_ORG_MAPPING: "ubix-viewers:2:Viewer, ubix-editors:2:Editor, digiflow-viewers:3:Viewer, digiflow-editors:3:Editor, obs-platform-admins:1:Admin, obs-platform-admins:2:Admin, obs-platform-admins:3:Admin"
+      GF_AUTH_GENERIC_OAUTH_ORG_MAPPING: "obs-platform-admins:2:Admin, obs-platform-admins:3:Admin, obs-platform-admins:4:Admin, keve-admins:3:Admin, bci-admins:4:Admin, keve-ubix-viewers:3:Viewer, keve-ubix-editors:3:Editor, keve-digiflow-viewers:3:Viewer, keve-digiflow-editors:3:Editor, bci-ubix-viewers:4:Viewer, bci-ubix-editors:4:Editor, bci-digiflow-viewers:4:Viewer, bci-digiflow-editors:4:Editor"
     volumes:
       - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
       - ./grafana/platform-overview.json:/var/lib/grafana/dashboards/platform-overview.json:ro
+      - ./grafana/dashboards/keve:/var/lib/grafana/dashboards/keve:ro
+      - ./grafana/dashboards/bci:/var/lib/grafana/dashboards/bci:ro
       - grafana-data:/var/lib/grafana
     depends_on:
       - mimir
@@ -108,15 +150,24 @@ services:
       - tempo
       - keycloak
 
+  grafana-bootstrap:
+    <<: *grafana-common
+    profiles: [bootstrap]
+    volumes:
+      - ./grafana/datasources-bootstrap.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./grafana/dashboards-bootstrap.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+
   keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    image: quay.io/keycloak/keycloak:26.2
     restart: unless-stopped
-    command: ["start-dev"]
+    command: ["start-dev", "--import-realm"]
     ports:
       - "8090:8080"
     environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    volumes:
+      - ./identity/keycloak-realm.json:/opt/keycloak/data/import/observability-realm.json:ro
 
 volumes:
   mimir-data:

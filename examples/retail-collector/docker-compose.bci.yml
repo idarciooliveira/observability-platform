@@ -1,28 +1,29 @@
-name: retail-collector-keve
+# Variant B: retail-collector reporting as bci_digiflow (company=bci, project=digiflow).
+# Same app as docker-compose.yml (variant A = keve_digiflow) with a distinct
+# credential, distinct host ports (8094/5444), distinct containers and a
+# distinct network so both variants run side by side.
+# Usage: docker compose -f docker-compose.bci.yml --env-file .env.bci up -d --build
+name: retail-collector-bci
 services:
   retail-api:
     build:
       context: ./retail-api
       dockerfile: Dockerfile
-    container_name: example-retail-api-keve
+    container_name: example-retail-api-bci
     restart: unless-stopped
     ports:
-      - "${RETAIL_API_PORT:-8084}:8080"
+      - "${RETAIL_API_PORT:-8094}:8080"
     depends_on:
       postgres:
         condition: service_healthy
       retail-collector:
         condition: service_started
     networks:
-      # App joins ONLY its customer network. No direct path to the platform;
-      # the collector owns the platform leg.
-      - retail-example-keve
+      - retail-example-bci
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-retail_orders}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-retail_orders}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-retail_orders}
-      # App -> LOCAL collector only (plaintext, no token, no TLS).
-      # The collector holds KEVE_DIGIFLOW_OTEL_TOKEN and forwards via OTLP/HTTP.
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-retail-api}
       OTEL_RESOURCE_ATTRIBUTES: service.namespace=retail,deployment.environment=${ENV:-dev}
       OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
@@ -37,53 +38,47 @@ services:
 
   retail-collector:
     image: otel/opentelemetry-collector-contrib:0.135.0
-    container_name: example-retail-collector-keve
+    container_name: example-retail-collector-bci
     restart: unless-stopped
-    # File-backed queue volume arrives root-owned and the image runs non-root;
-    # root here mirrors the tempo concession in compose.local.yml (local demo only).
     user: "0"
     command: ["--config=/etc/otel/collector-config.yaml"]
     volumes:
       - ./collector/collector-config.yaml:/etc/otel/collector-config.yaml:ro
-      - retail-collector-queue-keve:/var/lib/otelcol
+      - retail-collector-queue-bci:/var/lib/otelcol
     networks:
-      - retail-example-keve
+      - retail-example-bci
     extra_hosts:
-      # No-op on Docker Desktop (Win/Mac); required on native Linux Engine.
       - "host.docker.internal:host-gateway"
     environment:
-      # keve_digiflow instance credential from observability-platform/.env.
-      # Must match KEVE_DIGIFLOW_OTEL_TOKEN in the platform .env; the gateway
-      # derives tenant.id=keve + project.id=digiflow from it and overwrites
-      # client values.
-      INSTANCE_OTEL_TOKEN: ${KEVE_DIGIFLOW_OTEL_TOKEN:?KEVE_DIGIFLOW_OTEL_TOKEN must be set}
+      # bci_digiflow instance credential (BCI_DIGIFLOW_OTEL_TOKEN).
+      INSTANCE_OTEL_TOKEN: ${BCI_DIGIFLOW_OTEL_TOKEN:?BCI_DIGIFLOW_OTEL_TOKEN must be set}
     healthcheck:
       test: ["NONE"]
 
   postgres:
     image: postgres:16-alpine
-    container_name: example-retail-postgres-keve
+    container_name: example-retail-postgres-bci
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-retail_orders}
       POSTGRES_USER: ${POSTGRES_USER:-retail_orders}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-retail_orders}
     ports:
-      - "${POSTGRES_PORT:-5434}:5432"
+      - "${POSTGRES_PORT:-5444}:5432"
     volumes:
-      - retail-postgres-data-keve:/var/lib/postgresql/data
+      - retail-postgres-data-bci:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-retail_orders} -d ${POSTGRES_DB:-retail_orders}"]
       interval: 5s
       timeout: 5s
       retries: 10
     networks:
-      - retail-example-keve
+      - retail-example-bci
 
 volumes:
-  retail-postgres-data-keve:
-  retail-collector-queue-keve:
+  retail-postgres-data-bci:
+  retail-collector-queue-bci:
 
 networks:
-  retail-example-keve:
-    name: retail-example-keve
+  retail-example-bci:
+    name: retail-example-bci

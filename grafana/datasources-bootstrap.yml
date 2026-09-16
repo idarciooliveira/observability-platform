@@ -1,0 +1,12 @@
+apiVersion: 1
+
+datasources:
+  - name: platform-metrics
+    uid: platform-metrics
+    type: prometheus
+    orgId: 1
+    url: http://mimir:9009/prometheus
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: platform

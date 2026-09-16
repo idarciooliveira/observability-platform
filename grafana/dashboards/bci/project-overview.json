@@ -1,0 +1,55 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "P8653BDA7FB601332"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "title": "Metrics for $project",
+      "type": "timeseries",
+      "targets": [{"expr": "count by (project_id) ({__name__=~\".+\",project_id=~\"$project\"})", "legendFormat": "{{project_id}}", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "loki", "uid": "P5C211CD80B1B0543"},
+      "fieldConfig": {"defaults": {"unit": "logs"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "title": "Logs for $project",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (project_id) (count_over_time({service_name=~\".+\"} | project_id=~\"$project\" [$__interval]))", "legendFormat": "{{project_id}}", "refId": "A"}]
+    },
+    {
+      "datasource": {"type": "loki", "uid": "P5C211CD80B1B0543"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+      "id": 3,
+      "title": "Recent logs for $project",
+      "type": "logs",
+      "targets": [{"expr": "{service_name=~\".+\"} | project_id=~\"$project\"", "refId": "A"}]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["project", "bci"],
+  "templating": {
+    "list": [
+      {
+        "current": {"text": "All", "value": ["$__all"]},
+        "includeAll": true,
+        "label": "Project",
+        "multi": true,
+        "name": "project",
+        "options": [],
+        "query": "ubix,digiflow",
+        "type": "custom",
+        "allValue": ".*"
+      }
+    ]
+  },
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Project overview",
+  "uid": "bci-project-overview",
+  "version": 1
+}

@@ -5,19 +5,27 @@ Public entrypoint for project telemetry::
 
     project collector (OTLP/HTTP + Bearer token)
         -> otel-gateway:4318            (this service: authenticate + route)
-        -> otel-collector:<tenant-port> (per-tenant pipeline: overwrite
-                                          project.id, export with tenant header)
-        -> Mimir / Loki / Tempo
+        -> otel-collector:<instance-port> (per-instance pipeline: overwrite
+                                          tenant.id + project.id, export
+                                          with company header)
+        -> Mimir / Loki / Tempo (X-Scope-OrgID = company)
+
+Isolation model (Option B, soft project isolation, proxy-ready):
+  tenant (company, HARD storage isolation): keve, bci.
+  project (soft query isolation): ubix, digiflow.
+  instance (ingest identity, 1 credential -> 1 pipeline): keve_ubix,
+    keve_digiflow, bci_ubix, bci_digiflow.
 
 Responsibilities:
   1. Authenticate machine telemetry via ``Authorization: Bearer <token>``.
      Tokens come from the environment (``<TENANT>_OTEL_TOKEN``); the process
      refuses to start if any configured tenant has no token.
-  2. Map the authenticated credential to a project identity
-     (``credential -> project_id``). The client-supplied ``project.id``
-     resource attribute is NEVER trusted; the body is forwarded opaquely to
-     the tenant's private pipeline, whose ``transform`` processor overwrites
-     ``project.id`` with the authenticated value.
+  2. Map the authenticated credential to an instance identity
+     (``credential -> instance_id``). The client-supplied ``project.id``
+     and ``tenant.id`` resource attributes are NEVER trusted; the body is
+     forwarded opaquely to the instance's private pipeline, whose
+     ``transform`` processor overwrites BOTH attributes with the
+     authenticated values (company + project).
   3. Strip any client-supplied tenant-selection headers (``X-Scope-OrgID``,
      ``X-Tenant``, ...) and set the trusted ``X-Scope-OrgID: <tenant>``
      header on the upstream request.
@@ -140,16 +148,17 @@ class Metrics:
 
 
 def load_config():
-    """Build tenant routing table from the environment.
+    """Build instance routing table from the environment.
 
-    GATEWAY_TENANTS: comma-separated tenant ids, e.g. ``ubix,digiflow``.
-    Per tenant ``<name>`` (upper-cased, dashes -> underscores):
+    GATEWAY_TENANTS: comma-separated instance ids, e.g.
+        ``keve_ubix,keve_digiflow,bci_ubix,bci_digiflow``.
+    Per instance ``<name>`` (upper-cased, dashes -> underscores):
       ``<NAME>_OTEL_TOKEN``  - Bearer credential (required, never logged).
       ``<NAME>_UPSTREAM``    - internal collector URL, defaults to
                                ``http://otel-collector:<port>`` where ports
                                are assigned sequentially from 4319.
     """
-    tenants_raw = os.environ.get("GATEWAY_TENANTS", "ubix,digiflow")
+    tenants_raw = os.environ.get("GATEWAY_TENANTS", "keve_ubix,keve_digiflow,bci_ubix,bci_digiflow")
     tenants = [t.strip().lower() for t in tenants_raw.split(",") if t.strip()]
     if not tenants:
         raise SystemExit("GATEWAY_TENANTS is empty; refusing to start.")

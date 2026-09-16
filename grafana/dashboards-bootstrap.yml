@@ -1,0 +1,13 @@
+apiVersion: 1
+
+# Keep startup independent of company organizations. up.ps1 creates and
+# validates those organizations before switching to dashboards.yml.
+providers:
+  - name: bootstrap
+    orgId: 1
+    folder: Platform
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards

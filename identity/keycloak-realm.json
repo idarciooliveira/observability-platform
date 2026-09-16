@@ -1,14 +1,95 @@
 {
   "realm": "observability",
-  "clients": ["grafana"],
+  "enabled": true,
+  "displayName": "Observability Platform",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "verifyEmail": false,
+  "clients": [
+    {
+      "clientId": "grafana",
+      "name": "Grafana",
+      "description": "Grafana OIDC (generic OAuth). Secret is a placeholder - rotate to KEYCLOAK_GRAFANA_CLIENT_SECRET after first import.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "changeme-keycloak-grafana-client-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "https://grafana.internal.example/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
   "groups": [
-    "/obs-platform-admins",
-    "/ubix-viewers",
-    "/ubix-editors",
-    "/digiflow-viewers",
-    "/digiflow-editors"
+    {
+      "name": "obs-platform-admins",
+      "path": "/obs-platform-admins"
+    },
+    {
+      "name": "keve-admins",
+      "path": "/keve-admins"
+    },
+    {
+      "name": "bci-admins",
+      "path": "/bci-admins"
+    },
+    {
+      "name": "keve-ubix-viewers",
+      "path": "/keve-ubix-viewers"
+    },
+    {
+      "name": "keve-ubix-editors",
+      "path": "/keve-ubix-editors"
+    },
+    {
+      "name": "keve-digiflow-viewers",
+      "path": "/keve-digiflow-viewers"
+    },
+    {
+      "name": "keve-digiflow-editors",
+      "path": "/keve-digiflow-editors"
+    },
+    {
+      "name": "bci-ubix-viewers",
+      "path": "/bci-ubix-viewers"
+    },
+    {
+      "name": "bci-ubix-editors",
+      "path": "/bci-ubix-editors"
+    },
+    {
+      "name": "bci-digiflow-viewers",
+      "path": "/bci-digiflow-viewers"
+    },
+    {
+      "name": "bci-digiflow-editors",
+      "path": "/bci-digiflow-editors"
+    }
   ]
 }
-
-// Human access uses Keycloak OIDC.
-// Machine telemetry uses project credentials or mTLS.

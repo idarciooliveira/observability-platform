@@ -2,18 +2,23 @@
 #
 # Onboarding:
 #   1. Copy this file to your service repository.
-#   2. Set PROJECT_OTEL_TOKEN to the token issued by the platform team.
+#   2. Set PROJECT_OTEL_TOKEN to the INSTANCE token issued by the platform
+#      team (e.g. KEVE_UBIX_OTEL_TOKEN for company=keve, project=ubix).
 #   3. Set service.name (and service.version / deployment.environment).
 #   4. Point the exporter at https://ingest.observability.example.com
 #      (OTLP/HTTP :4318 in this Phase 1 deployment).
 #   5. Start the application and verify one metric, log and trace arrive.
 #
-# Rules:
+# Rules (contract — never set these client-side):
 # - Use the otlphttp exporter (Phase 1 gateway serves OTLP/HTTP only).
 # - Send Authorization: Bearer ${PROJECT_OTEL_TOKEN} on every request.
-# - Do NOT set project.id yourself: the platform derives it from your
-#   credential and overwrites any client-supplied value.
+# - Do NOT set tenant.id yourself: the platform derives the company from
+#   your credential and overwrites any client-supplied value.
+# - Do NOT set project.id yourself: the platform derives the project from
+#   your credential and overwrites any client-supplied value.
 # - Do NOT set X-Scope-OrgID: the gateway sets it from your credential.
+# - Both tenant.id + project.id are stored, so a future read-proxy can
+#   enforce per-project filtering without re-ingestion.
 
 receivers:
   otlp:
@@ -39,7 +44,7 @@ exporters:
   otlphttp/platform:
     endpoint: ${PLATFORM_INGEST_URL:-https://ingest.observability.example.com}
     headers:
-      Authorization: "Bearer ${PROJECT_OTEL_TOKEN:?set the project token issued by the platform team}"
+      Authorization: "Bearer ${PROJECT_OTEL_TOKEN:?set the instance token issued by the platform team}"
     retry_on_failure: { enabled: true }
     sending_queue: { enabled: true, queue_size: 5000 }
 

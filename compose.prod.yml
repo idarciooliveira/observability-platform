@@ -1,20 +1,26 @@
 services:
-  # Trust boundary: authenticates project Bearer tokens, maps each credential
-  # to its tenant, and proxies OTLP/HTTP to the tenant's private pipeline.
+  # Trust boundary: authenticates instance Bearer tokens, maps each credential
+  # to its instance, and proxies OTLP/HTTP to the instance's private pipeline.
   # This is the ONLY service that publishes the ingestion ports.
+  # 4 instances (keve_ubix, keve_digiflow, bci_ubix, bci_digiflow),
+  # 2 storage tenants (keve, bci via X-Scope-OrgID on shared company exporters).
   otel-gateway:
     build: ./gateway
     restart: unless-stopped
     ports:
       - "4318:4318"
     environment:
-      GATEWAY_TENANTS: ubix,digiflow
+      GATEWAY_TENANTS: keve_ubix,keve_digiflow,bci_ubix,bci_digiflow
       GATEWAY_LISTEN_PORT: "4318"
       GATEWAY_METRICS_PORT: "9464"
-      UBIX_OTEL_TOKEN: ${UBIX_OTEL_TOKEN:?UBIX_OTEL_TOKEN is not set}
-      DIGIFLOW_OTEL_TOKEN: ${DIGIFLOW_OTEL_TOKEN:?DIGIFLOW_OTEL_TOKEN is not set}
-      UBIX_UPSTREAM: http://otel-collector:4319
-      DIGIFLOW_UPSTREAM: http://otel-collector:4320
+      KEVE_UBIX_OTEL_TOKEN: ${KEVE_UBIX_OTEL_TOKEN:?KEVE_UBIX_OTEL_TOKEN is not set}
+      KEVE_DIGIFLOW_OTEL_TOKEN: ${KEVE_DIGIFLOW_OTEL_TOKEN:?KEVE_DIGIFLOW_OTEL_TOKEN is not set}
+      BCI_UBIX_OTEL_TOKEN: ${BCI_UBIX_OTEL_TOKEN:?BCI_UBIX_OTEL_TOKEN is not set}
+      BCI_DIGIFLOW_OTEL_TOKEN: ${BCI_DIGIFLOW_OTEL_TOKEN:?BCI_DIGIFLOW_OTEL_TOKEN is not set}
+      KEVE_UBIX_UPSTREAM: http://otel-collector:4319
+      KEVE_DIGIFLOW_UPSTREAM: http://otel-collector:4320
+      BCI_UBIX_UPSTREAM: http://otel-collector:4321
+      BCI_DIGIFLOW_UPSTREAM: http://otel-collector:4322
     depends_on:
       otel-collector:
         condition: service_started
@@ -38,7 +44,7 @@ services:
       - otel-gateway
       - mimir
 
-  # Internal collector: per-tenant pipelines only. No published ports;
+  # Internal collector: per-instance pipelines only. No published ports;
   # reachable solely via the compose network (otel-gateway -> otel-collector).
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.135.0
@@ -67,6 +73,8 @@ services:
       - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
       - ./grafana/platform-overview.json:/var/lib/grafana/dashboards/platform-overview.json:ro
+      - ./grafana/dashboards/keve:/var/lib/grafana/dashboards/keve:ro
+      - ./grafana/dashboards/bci:/var/lib/grafana/dashboards/bci:ro
 
   mimir:
     image: grafana/mimir:2.16.0
@@ -75,14 +83,30 @@ services:
   loki:
     image: grafana/loki:3.7.6
     restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./deploy/local/loki.yml:/etc/loki/loki.yml:ro
 
   tempo:
     image: grafana/tempo:2.8.0
     restart: unless-stopped
 
   keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    image: quay.io/keycloak/keycloak:26.2
     restart: unless-stopped
+    # One-shot bootstrap: imports identity/keycloak-realm.json on first boot
+    # only (realm exists -> no-op). Rotate the grafana client secret to
+    # KEYCLOAK_GRAFANA_CLIENT_SECRET after first import; later realm edits
+    # need keycloak-config-cli / kcadm.sh, not a re-import.
+    command: ["start", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:?KC_BOOTSTRAP_ADMIN_PASSWORD is not set}
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY: edge
+      KC_HTTP_ENABLED: "true"
+    volumes:
+      - ./identity/keycloak-realm.json:/opt/keycloak/data/import/observability-realm.json:ro
 
 volumes:
   platform-prometheus-data:

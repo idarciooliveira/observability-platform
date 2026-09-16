@@ -1,36 +1,61 @@
 # Central OpenTelemetry Collector (internal).
 #
 # Trust model: this collector NEVER faces projects directly. The only writer
-# is otel-gateway, which authenticates the project Bearer token and routes
-# each tenant to its own private OTLP receiver below. Because routing happens
-# before any telemetry is inspected, a spoofed `project.id` resource
-# attribute can never cross tenants; the per-tenant `transform/*_identity`
-# processors then overwrite it with the authenticated value as defense in
-# depth, and the per-tenant exporters attach the matching static
-# `X-Scope-OrgID` header (Mimir, Loki and Tempo all use X-Scope-OrgID for
-# multitenancy when it is enabled server-side).
+# is otel-gateway, which authenticates the instance Bearer token and routes
+# each instance to its own private OTLP receiver below. Because routing happens
+# before any telemetry is inspected, spoofed `project.id` / `tenant.id`
+# resource attributes can never cross instances; the per-instance
+# `transform/*_identity` processors then overwrite BOTH attributes with the
+# authenticated values as defense in depth.
 #
-# Adding a project: add otlp/<id> receiver on the next 43xx port, a
-# transform/<id>_identity processor, three otlphttp exporters with
-# X-Scope-OrgID=<id>, three pipelines, and the matching gateway env vars
-# (see deploy/collector/tenant-routing.yml).
+# Isolation model (company orgs, soft project isolation, proxy-ready):
+#   tenant (company, HARD storage isolation): keve, bci -> X-Scope-OrgID on
+#     the 6 SHARED company exporters below (Mimir, Loki and Tempo all use
+#     X-Scope-OrgID for multitenancy when enabled server-side).
+#   project (SOFT query isolation): ubix, digiflow -> `project.id` attribute
+#     + default Grafana filter per project folder inside the company org.
+#     Documented as soft: the company is the hard security boundary.
+#   instance (ingest identity): keve_ubix, keve_digiflow, bci_ubix,
+#     bci_digiflow -> 4 receivers, 4 identity transforms, 12 pipelines
+#     (traces|metrics|logs per instance -> shared company exporter).
+#
+# Both `tenant.id` (<company>) and `project.id` (<project>) are stored from
+# day one, so a future read-proxy (Keycloak JWT -> allowed (tenant,project)
+# -> inject PromQL/LogQL/TraceQL filter + audit log) or a migration to hard
+# per-project OrgIDs needs NO ingest redesign.
+#
+# Adding an instance: add otlp/<instance> receiver on the next 43xx port, a
+# transform/<instance>_identity processor setting both IDs, reuse the
+# company exporters (or add otlphttp/{mimir,loki,tempo}_<company> for a new
+# company), three pipelines, and the matching gateway env vars
+# (see deploy/collector/tenant-routing.yml and scripts/add-instance.py).
 
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
 
 receivers:
-  # Private per-tenant ingress. Bound to the compose network only; the
+  # Private per-instance ingress. Bound to the compose network only; the
   # gateway is the sole client. HTTP only (gateway proxies OTLP/HTTP).
-  otlp/ubix:
+  otlp/keve_ubix:
     protocols:
       http:
         endpoint: 0.0.0.0:4319
         include_metadata: true
-  otlp/digiflow:
+  otlp/keve_digiflow:
     protocols:
       http:
         endpoint: 0.0.0.0:4320
+        include_metadata: true
+  otlp/bci_ubix:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4321
+        include_metadata: true
+  otlp/bci_digiflow:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4322
         include_metadata: true
 
 processors:
@@ -41,37 +66,79 @@ processors:
 
   batch: {}
 
-  # Trusted identity: overwrite any client-supplied project.id with the
-  # tenant that owns this pipeline. `set` replaces a spoofed value and
-  # creates the attribute when absent, so both values can never coexist.
-  transform/ubix_identity:
+  # Trusted identity: overwrite any client-supplied tenant.id / project.id
+  # with the instance that owns this pipeline. `set` replaces spoofed values
+  # and creates the attributes when absent, so both values can never coexist.
+  transform/keve_ubix_identity:
     error_mode: ignore
     trace_statements:
       - context: resource
         statements:
+          - set(attributes["tenant.id"], "keve")
           - set(attributes["project.id"], "ubix")
     metric_statements:
       - context: resource
         statements:
+          - set(attributes["tenant.id"], "keve")
           - set(attributes["project.id"], "ubix")
     log_statements:
       - context: resource
         statements:
+          - set(attributes["tenant.id"], "keve")
           - set(attributes["project.id"], "ubix")
 
-  transform/digiflow_identity:
+  transform/keve_digiflow_identity:
     error_mode: ignore
     trace_statements:
       - context: resource
         statements:
+          - set(attributes["tenant.id"], "keve")
           - set(attributes["project.id"], "digiflow")
     metric_statements:
       - context: resource
         statements:
+          - set(attributes["tenant.id"], "keve")
           - set(attributes["project.id"], "digiflow")
     log_statements:
       - context: resource
         statements:
+          - set(attributes["tenant.id"], "keve")
+          - set(attributes["project.id"], "digiflow")
+
+  transform/bci_ubix_identity:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["tenant.id"], "bci")
+          - set(attributes["project.id"], "ubix")
+    metric_statements:
+      - context: resource
+        statements:
+          - set(attributes["tenant.id"], "bci")
+          - set(attributes["project.id"], "ubix")
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["tenant.id"], "bci")
+          - set(attributes["project.id"], "ubix")
+
+  transform/bci_digiflow_identity:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["tenant.id"], "bci")
+          - set(attributes["project.id"], "digiflow")
+    metric_statements:
+      - context: resource
+        statements:
+          - set(attributes["tenant.id"], "bci")
+          - set(attributes["project.id"], "digiflow")
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["tenant.id"], "bci")
           - set(attributes["project.id"], "digiflow")
 
   # Minimal secret redaction on resource attributes. Full PII scrubbing of
@@ -115,45 +182,46 @@ exporters:
     sampling_initial: 5
     sampling_thereafter: 200
 
-  # Mimir OTLP ingestion: http://mimir:9009/otlp (X-Scope-OrgID = tenant).
-  otlphttp/mimir_ubix:
+  # Mimir OTLP ingestion: http://mimir:9009/otlp (X-Scope-OrgID = company).
+  # Shared per company: both <company> instances fan into the same exporter.
+  otlphttp/mimir_keve:
     endpoint: http://mimir:9009/otlp
     headers:
-      X-Scope-OrgID: ubix
+      X-Scope-OrgID: keve
     retry_on_failure: { enabled: true }
     sending_queue: { enabled: true, queue_size: 10000 }
-  otlphttp/mimir_digiflow:
+  otlphttp/mimir_bci:
     endpoint: http://mimir:9009/otlp
     headers:
-      X-Scope-OrgID: digiflow
+      X-Scope-OrgID: bci
     retry_on_failure: { enabled: true }
     sending_queue: { enabled: true, queue_size: 10000 }
 
-  # Loki OTLP ingestion (available since Loki 2.9): X-Scope-OrgID = tenant.
-  otlphttp/loki_ubix:
+  # Loki OTLP ingestion (available since Loki 2.9): X-Scope-OrgID = company.
+  otlphttp/loki_keve:
     endpoint: http://loki:3100/otlp
     headers:
-      X-Scope-OrgID: ubix
+      X-Scope-OrgID: keve
     retry_on_failure: { enabled: true }
     sending_queue: { enabled: true, queue_size: 10000 }
-  otlphttp/loki_digiflow:
+  otlphttp/loki_bci:
     endpoint: http://loki:3100/otlp
     headers:
-      X-Scope-OrgID: digiflow
+      X-Scope-OrgID: bci
     retry_on_failure: { enabled: true }
     sending_queue: { enabled: true, queue_size: 10000 }
 
-  # Tempo OTLP ingestion with multitenancy_enabled: X-Scope-OrgID = tenant.
-  otlphttp/tempo_ubix:
+  # Tempo OTLP ingestion with multitenancy_enabled: X-Scope-OrgID = company.
+  otlphttp/tempo_keve:
     endpoint: http://tempo:4318
     headers:
-      X-Scope-OrgID: ubix
+      X-Scope-OrgID: keve
     retry_on_failure: { enabled: true }
     sending_queue: { enabled: true, queue_size: 10000 }
-  otlphttp/tempo_digiflow:
+  otlphttp/tempo_bci:
     endpoint: http://tempo:4318
     headers:
-      X-Scope-OrgID: digiflow
+      X-Scope-OrgID: bci
     retry_on_failure: { enabled: true }
     sending_queue: { enabled: true, queue_size: 10000 }
 
@@ -163,27 +231,51 @@ service:
     logs:
       level: INFO
   pipelines:
-    traces/ubix:
-      receivers: [otlp/ubix]
-      processors: [memory_limiter, transform/ubix_identity, transform/redact_pii, batch]
-      exporters: [otlphttp/tempo_ubix, debug]
-    metrics/ubix:
-      receivers: [otlp/ubix]
-      processors: [memory_limiter, transform/ubix_identity, transform/redact_pii, batch]
-      exporters: [otlphttp/mimir_ubix, debug]
-    logs/ubix:
-      receivers: [otlp/ubix]
-      processors: [memory_limiter, transform/ubix_identity, transform/redact_pii, batch]
-      exporters: [otlphttp/loki_ubix, debug]
-    traces/digiflow:
-      receivers: [otlp/digiflow]
-      processors: [memory_limiter, transform/digiflow_identity, transform/redact_pii, batch]
-      exporters: [otlphttp/tempo_digiflow, debug]
-    metrics/digiflow:
-      receivers: [otlp/digiflow]
-      processors: [memory_limiter, transform/digiflow_identity, transform/redact_pii, batch]
-      exporters: [otlphttp/mimir_digiflow, debug]
-    logs/digiflow:
-      receivers: [otlp/digiflow]
-      processors: [memory_limiter, transform/digiflow_identity, transform/redact_pii, batch]
-      exporters: [otlphttp/loki_digiflow, debug]
+    traces/keve_ubix:
+      receivers: [otlp/keve_ubix]
+      processors: [memory_limiter, transform/keve_ubix_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/tempo_keve, debug]
+    metrics/keve_ubix:
+      receivers: [otlp/keve_ubix]
+      processors: [memory_limiter, transform/keve_ubix_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/mimir_keve, debug]
+    logs/keve_ubix:
+      receivers: [otlp/keve_ubix]
+      processors: [memory_limiter, transform/keve_ubix_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/loki_keve, debug]
+    traces/keve_digiflow:
+      receivers: [otlp/keve_digiflow]
+      processors: [memory_limiter, transform/keve_digiflow_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/tempo_keve, debug]
+    metrics/keve_digiflow:
+      receivers: [otlp/keve_digiflow]
+      processors: [memory_limiter, transform/keve_digiflow_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/mimir_keve, debug]
+    logs/keve_digiflow:
+      receivers: [otlp/keve_digiflow]
+      processors: [memory_limiter, transform/keve_digiflow_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/loki_keve, debug]
+    traces/bci_ubix:
+      receivers: [otlp/bci_ubix]
+      processors: [memory_limiter, transform/bci_ubix_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/tempo_bci, debug]
+    metrics/bci_ubix:
+      receivers: [otlp/bci_ubix]
+      processors: [memory_limiter, transform/bci_ubix_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/mimir_bci, debug]
+    logs/bci_ubix:
+      receivers: [otlp/bci_ubix]
+      processors: [memory_limiter, transform/bci_ubix_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/loki_bci, debug]
+    traces/bci_digiflow:
+      receivers: [otlp/bci_digiflow]
+      processors: [memory_limiter, transform/bci_digiflow_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/tempo_bci, debug]
+    metrics/bci_digiflow:
+      receivers: [otlp/bci_digiflow]
+      processors: [memory_limiter, transform/bci_digiflow_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/mimir_bci, debug]
+    logs/bci_digiflow:
+      receivers: [otlp/bci_digiflow]
+      processors: [memory_limiter, transform/bci_digiflow_identity, transform/redact_pii, batch]
+      exporters: [otlphttp/loki_bci, debug]

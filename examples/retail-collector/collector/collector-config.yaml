@@ -1,22 +1,25 @@
 # retail-collector (contrib 0.135.0) — Variant A customer-side collector.
 #
 # retail-api sends OTLP here (plaintext, no auth — reachable only inside
-# `retail-example`). This collector filters/buffers, then forwards via
-# OTLP/HTTP to the platform compose.local.yml gateway, which authenticates
-# DIGIFLOW_OTEL_TOKEN and OVERWRITES project.id=digiflow server-side.
+# its `retail-example-*` network). This collector filters/buffers, then
+# forwards via OTLP/HTTP to the platform compose.local.yml gateway, which
+# authenticates the INSTANCE token and OVERWRITES tenant.id + project.id
+# server-side (keve_digiflow for variant A, bci_digiflow for variant B).
 # This collector is NEVER trusted as a security boundary.
 #
-# Token comes from container env (DIGIFLOW_OTEL_TOKEN, see .env.example).
-# Must match DIGIFLOW_OTEL_TOKEN in observability-platform/.env.
+# Token comes from container env (INSTANCE_OTEL_TOKEN, mapped in
+# docker-compose.yml / docker-compose.bci.yml from KEVE_DIGIFLOW_OTEL_TOKEN
+# resp. BCI_DIGIFLOW_OTEL_TOKEN — see .env.example / .env.keve / .env.bci).
+# Must match the instance token in observability-platform/.env.
 
 extensions:
   health_check:
   file_storage:
     directory: /var/lib/otelcol
   bearertokenauth/platform:
-    # Injects `Authorization: Bearer <DIGIFLOW_OTEL_TOKEN>` on the platform leg
+    # Injects `Authorization: Bearer <INSTANCE_OTEL_TOKEN>` on the platform leg
     # so the token never lives in this committed file.
-    token: "${env:DIGIFLOW_OTEL_TOKEN}"
+    token: "${env:INSTANCE_OTEL_TOKEN}"
 
 receivers:
   # Plaintext, no auth: only retail-api can reach this (customer network).
