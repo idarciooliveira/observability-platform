@@ -1,4 +1,4 @@
-# Tenant registry: source of truth for onboarding (Option B: soft project isolation).
+# Tenant registry: source of truth for onboarding (company orgs, soft project isolation).
 #
 # Model:
 #   tenant (company, HARD storage isolation, X-Scope-OrgID): keve, bci
@@ -6,9 +6,12 @@
 #   instance (ingest identity, 1 credential -> 1 pipeline): keve_ubix,
 #     keve_digiflow, bci_ubix, bci_digiflow
 #
-# Storage: 2 OrgIDs (keve, bci). Query: 4 Grafana orgs with a default
-# project.id filter (soft). A future read-proxy can enforce the filter
-# without re-ingestion because both IDs are already stored.
+# Storage: 2 OrgIDs (keve, bci). Query: 2 company Grafana orgs (keve:3,
+# bci:4) plus Main:2; projects live inside their company org with a
+# default project.id filter (soft). A future read-proxy can enforce the
+# filter without re-ingestion because both IDs are already stored.
+# (Fresh Grafana 12 reserves org 1 for the bootstrap admin's personal
+# org; the platform does not use it.)
 tenants:
   - id: keve
     display_name: KEVE
@@ -23,23 +26,23 @@ instances:
   - id: keve_ubix
     tenant: keve
     project: ubix
-    grafana_org_id: 2
-    grafana_org: keve_ubix
+    grafana_org_id: 3
+    grafana_org: keve
   - id: keve_digiflow
     tenant: keve
     project: digiflow
     grafana_org_id: 3
-    grafana_org: keve_digiflow
+    grafana_org: keve
   - id: bci_ubix
     tenant: bci
     project: ubix
     grafana_org_id: 4
-    grafana_org: bci_ubix
+    grafana_org: bci
   - id: bci_digiflow
     tenant: bci
     project: digiflow
-    grafana_org_id: 5
-    grafana_org: bci_digiflow
+    grafana_org_id: 4
+    grafana_org: bci
 
 # Keep this registry as the source of truth for onboarding.
 # Old per-project OrgIDs (ubix/digiflow) are orphaned: history stays, no backfill.

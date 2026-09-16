@@ -53,28 +53,30 @@ token configured — that is the fail-closed check working.
 
 ## 1b. Grafana isolation (manual — orgs cannot be file-provisioned)
 
-The script reserves the next free Grafana org id and writes the files
-against it, but the org itself must be created against the running Grafana:
+Grafana orgs are per COMPANY (`keve`, `bci`). An instance in an existing
+company reuses its company org — no manual Grafana org step. Only a NEW
+company needs one, created against the running Grafana:
 
 1. Create the org (admin API or Server Admin UI):
-   `POST /api/orgs {"name":"<instance>"}` — it **must** return the id
+   `POST /api/orgs {"name":"<company>"}` — it **must** return the id
    the script assumed. If it returns another id, re-run the script with
    `--grafana-org-id <actual-id>` to rewrite `datasources.yml` + `ORG_MAPPING`.
 2. Keycloak: create groups `<instance-dashed>-viewers` and
    `<instance-dashed>-editors` (plus `<company>-admins` for company admins).
-3. Redeploy Grafana, have the instance users log out/in (org membership and
-   roles apply at login), then verify: Explore in the new org shows only
-   `<instance>-*` sources, and the other instance orgs show nothing of the
-   new instance. Viewers get no Explore/create (dashboard-only with a fixed
-   `project.id` variable); document project-level as soft, company-level as
-   the hard boundary.
+3. In the company org, add a folder per project with a fixed `project.id`
+   dashboard filter (restrict folders with Teams for project separation).
+4. Redeploy Grafana, have the instance users log out/in (org membership and
+   roles apply at login), then verify: Explore in the company org shows only
+   `<company>-*` sources. Viewers get no Explore/create (dashboard-only
+   with a fixed `project.id` variable); document project-level as soft,
+   company-level as the hard boundary.
 
 One-time prerequisite (already done for this stack, needed once per
 environment): Grafana is provisioned from `grafana/datasources.yml` and
 authenticates via Keycloak OIDC with group→org mapping
 (`ORG_MAPPING`, no anonymous access, no auto-assign to Main Org).
-`Main Org.` keeps no datasources; platform admins reach instance orgs via
-the org switcher (Profile → Organizations).
+`Main Org.` keeps platform datasources only; platform admins reach company
+orgs via the org switcher (Profile → Organizations).
 
 Manual follow-ups (not in this repo): Keycloak users, Grafana dashboards
 and alerts.

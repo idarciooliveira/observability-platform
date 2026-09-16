@@ -30,10 +30,11 @@ instance (ingest identity, 1 credential -> 1 pipeline): keve_ubix,
   keve_digiflow, bci_ubix, bci_digiflow
 ```
 
-Ingestion: 4 receivers/transforms. Storage: 2 OrgIDs. Query: 4 Grafana orgs
-(Main:1, keve_ubix:2, keve_digiflow:3, bci_ubix:4, bci_digiflow:5) with a
-default `project.id` filter (soft). A future read-proxy can enforce the
-filter without re-ingestion because both IDs are already stored.
+Ingestion: 4 receivers/transforms. Storage: 2 OrgIDs. Query: 2 company
+Grafana orgs (Main:2, keve:3, bci:4 on fresh Grafana 12 — org 1 is the
+bootstrap admin's personal org and is unused) with one folder per project
+and a default `project.id` filter (soft). A future read-proxy can enforce
+the filter without re-ingestion because both IDs are already stored.
 
 Tenant identity comes from the authenticated machine credential, never from
 client-supplied telemetry attributes. A client sending `project.id=digiflow`
@@ -49,11 +50,16 @@ curl http://localhost:4318/healthz
 python3 -m pytest gateway/tests/ tests/ -v
 ```
 
-> Rollout note: old per-project OrgIDs (`ubix`/`digiflow`) are orphaned —
-> history stays, no backfill. Backup volumes, stop the stack, land the new
-> config, `compose.local.yml up -d --build`, create the 4 Grafana orgs with
-> their exact IDs, have users re-login, rotate in the 4 new tokens, then
-> retire `UBIX_`/`DIGIFLOW_` after the examples migrate.
+> Rollout note: the per-instance Grafana orgs (`keve_ubix`, `keve_digiflow`,
+> `bci_ubix`, `bci_digiflow`) and old per-project OrgIDs (`ubix`/`digiflow`)
+> are retired — history stays, no backfill. Grafana cannot renumber orgs,
+> so existing environments must reset its state: backup volumes, stop the
+> stack, land the new config, `docker volume rm
+> <project>_grafana-data`, `compose.local.yml up -d --build`, seed the
+> company orgs (`keve` -> id 3, `bci` -> id 4; Main is 2 on fresh Grafana
+> 12), restart Grafana to provision company datasources, have users
+> re-login, then retire `UBIX_`/`DIGIFLOW_` after the examples migrate.
+> Telemetry history in Mimir/Loki/Tempo is untouched (separate volumes).
 
 ## Tenant isolation
 
@@ -144,19 +150,19 @@ The gateway sidecar is the smallest component that closes this gap
 
 ### Query layer (soft project isolation)
 
-Grafana orgs: Main:1, keve_ubix:2, keve_digiflow:3, bci_ubix:4, bci_digiflow:5.
-Each instance org owns 3 datasources (`<instance>-metrics/logs/traces`)
-pointing at its COMPANY header. Project isolation inside a company is SOFT:
-dashboards carry a fixed `project.id` variable, viewers get no
-Explore/create. Document project-level as soft; company-level as the hard
-security boundary.
+Grafana orgs: Main:2, keve:3, bci:4. Each company org owns 3 datasources
+(`<company>-metrics/logs/traces`) pointing at its COMPANY header.
+Projects live inside their company org as folders/teams; project
+isolation inside a company is SOFT: dashboards carry a fixed `project.id`
+variable, viewers get no Explore/create. Document project-level as soft;
+company-level as the hard security boundary.
 
 RBAC (flat Keycloak groups + `GF_AUTH_GENERIC_OAUTH_ORG_MAPPING`):
 
-- `obs-platform-admins` -> Admin 1,2,3,4,5 (Platform Team)
-- `keve-admins` -> Admin 2,3 ; `bci-admins` -> Admin 4,5 (company-admin)
+- `obs-platform-admins` -> Admin 2,3,4 (Platform Team)
+- `keve-admins` -> Admin 3 ; `bci-admins` -> Admin 4 (company-admin)
 - 8 project groups (`keve-ubix-viewers/editors`, ...) -> Viewer/Editor in
-  their org only
+  their company org only
 - cross-company lead, e.g. Domingos: member of `keve-digiflow-editors` +
   `bci-digiflow-editors` -> Editor 3+4 only
 
@@ -239,19 +245,21 @@ only, idempotent, preserves comments). Full guides in [`runbook/`](runbook/):
    `project:`, `storage_tenant:`), `deploy/collector/collector-config.yml`
    (receiver on the next `43xx` port, `transform/<instance>_identity` setting
    BOTH ids, reuse of the shared company exporters, three pipelines),
-   `compose.prod.yml` + `compose.local.yml` (`GATEWAY_TENANTS`,
-   `<INSTANCE>_OTEL_TOKEN`, `<INSTANCE>_UPSTREAM`, Grafana `ORG_MAPPING` +
-   `ROLE_ATTRIBUTE_PATH`), `grafana/datasources.yml` (three
-   `<instance>-metrics/logs/traces` datasources scoped to the instance org
-   id with the COMPANY header), and `.env.example`. Review the diff, run
-   `python3 -m pytest gateway/tests/ tests/ -v`, redeploy.
-   Then create the Grafana org against the running Grafana (manual — orgs cannot
-   be file-provisioned): its id must match the script's `--grafana-org-id`,
-   else re-run with the actual id. Full checklist: Variant A §1b.
+    `compose.prod.yml` + `compose.local.yml` (`GATEWAY_TENANTS`,
+    `<INSTANCE>_OTEL_TOKEN`, `<INSTANCE>_UPSTREAM`, Grafana `ORG_MAPPING` +
+    `ROLE_ATTRIBUTE_PATH`), `grafana/datasources.yml` (three
+    `<company>-metrics/logs/traces` datasources scoped to the company org
+    id with the COMPANY header; new companies only), and `.env.example`.
+    Review the diff, run `python3 -m pytest gateway/tests/ tests/ -v`,
+    redeploy. A new company also needs its Grafana org created against the
+    running Grafana (manual — orgs cannot be file-provisioned): its id must
+    match the script's `--grafana-org-id`, else re-run with the actual id.
+    Instances in an existing company reuse its org (no manual step).
+    Full checklist: Variant A §1b.
 2. Register ownership and environments in `projects/tenants.yml` (done by the script).
-   Create Keycloak groups and Grafana organization (manual, not in this repo):
-   `<instance-dashed>-viewers` / `-editors` plus `<company>-admins` for
-   company admins.
+    Create Keycloak groups and (new companies only) the Grafana organization
+    (manual, not in this repo): `<instance-dashed>-viewers` / `-editors`
+    plus `<company>-admins` for company admins.
 3. Create the instance machine credential and store it in the secret manager:
     - the script prints a fresh token (`secrets.token_hex(32)`, equivalent to
       `openssl rand -hex 32`); or generate with `openssl rand -hex 32`

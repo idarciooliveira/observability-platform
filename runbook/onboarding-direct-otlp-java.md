@@ -42,16 +42,18 @@ Grafana org `6` = next free after `1=Main Org.`, `2=keve_ubix`,
 - `compose.prod.yml` + `compose.local.yml` — `GATEWAY_TENANTS` +=
   `bci_onboarding` + `BCI_ONBOARDING_OTEL_TOKEN` / `BCI_ONBOARDING_UPSTREAM`
   + `ORG_MAPPING` entries
-  (`bci-onboarding-viewers:6:Viewer, bci-onboarding-editors:6:Editor`)
+  (`bci-onboarding-viewers:4:Viewer, bci-onboarding-editors:4:Editor`)
 - `.env.example` — `BCI_ONBOARDING_OTEL_TOKEN=changeme-bci_onboarding-token`
-- `grafana/datasources.yml` — `bci_onboarding-metrics/logs/traces` with
-  `orgId: 6`, header `bci`
+- `grafana/datasources.yml` — unchanged (`bci` company org 3 already owns
+  `bci-metrics/logs/traces` with header `bci`)
 
-Then the manual Grafana step (orgs cannot be file-provisioned): create the
-`bci_onboarding` org against the running Grafana — it must get id `6`, else
-re-run with `--grafana-org-id <actual-id>` — create the Keycloak
-`bci-onboarding-viewers` / `bci-onboarding-editors` groups, redeploy, and have
-users log out/in. Full checklist: Variant A §1b.
+Then the manual Grafana step: no new org needed (`bci` org 4 is reused) —
+create the Keycloak `bci-onboarding-viewers` / `bci-onboarding-editors`
+groups, add an `onboarding` folder with the `project.id` filter in the
+`bci` org, redeploy, and have users log out/in. (A brand-new company
+would need its org created against the running Grafana — it must get the
+script's `--grafana-org-id`, else re-run with the actual id.)
+Full checklist: Variant A §1b.
 
 Deploy and test:
 

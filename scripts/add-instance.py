@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """Add a new instance (company x project) to the observability platform.
 
-Decision (soft project isolation, proxy-ready):
+Decision (company orgs, soft project isolation, proxy-ready):
   tenant (company, hard storage isolation): keve, bci
   project (soft query isolation): ubix, digiflow
   instance (ingest identity, 1 credential -> 1 pipeline): <company>_<project>
+
+Grafana orgs are per COMPANY (Main:2, keve:3, bci:4 on fresh Grafana 12 —
+org 1 is the bootstrap admin's personal org and is unused); projects live
+inside their company org as folders/teams with a fixed project.id filter.
+Adding an instance to an existing company reuses that company's org and
+datasources. A brand-new company gets the next free org id plus 3 fresh
+datasources.
 
 Idempotently edits (text-preserving, no YAML round-trip so comments survive):
 
@@ -15,8 +22,8 @@ Idempotently edits (text-preserving, no YAML round-trip so comments survive):
   - compose.prod.yml + compose.local.yml (gateway wiring; ORG_MAPPING in
     compose.local.yml)
   - .env.example
-  - grafana/datasources.yml (3 per-instance datasources scoped to the
-    instance org, header = company)
+  - grafana/datasources.yml (3 per-company datasources scoped to the
+    company org, header = company; new companies only)
 
 It never writes real secrets to the repo. It generates a token with
 ``secrets.token_hex(32)`` (equivalent to ``openssl rand -hex 32``), prints the
@@ -24,9 +31,9 @@ It never writes real secrets to the repo. It generates a token with
 ``changeme-<instance>-token`` placeholder to ``.env.example``.
 
 Grafana org creation is NOT automated: orgs can only be created against a
-running Grafana (API/UI), so the script reserves the next free org id,
-writes the files against it, and prints the manual org-creation step.
-If the created org gets a different id, re-run with --grafana-org-id.
+running Grafana (API/UI). New companies need a company org whose id must
+match the script's --grafana-org-id; instances in an existing company
+reuse that company's org and need no manual Grafana step.
 
 Usage:
   python3 scripts/add-instance.py keve ubix
@@ -74,6 +81,19 @@ def next_free_port(texts, default=4319):
 def next_free_org_id(text, default=2):
     ids = [int(i) for i in re.findall(r"orgId:\s*(\d+)", text)]
     return max(ids) + 1 if ids else default
+
+
+def company_org_id(datasources_text, company):
+    """Return the Grafana org id for a company, allocating a new one only
+    for companies without datasources yet."""
+    m = re.search(
+        rf"^  - name: {re.escape(company)}-metrics\s*\n(?:.*\n)*?\s*orgId:\s*(\d+)",
+        datasources_text,
+        re.M,
+    )
+    if m:
+        return int(m.group(1))
+    return next_free_org_id(datasources_text)
 
 
 def ensure_tenants_yml(text, company, project, instance, org_id, grafana_org):
@@ -324,14 +344,14 @@ def ensure_compose_gateway(text, instance, port):
     return text, changed
 
 
-def ensure_org_mapping(text, instance, org_id):
+def ensure_org_mapping(text, instance, company_org_id):
     group_base = instance.replace("_", "-")
     if f"{group_base}-viewers:" in text:
         return text, False
     m = re.search(r'GF_AUTH_GENERIC_OAUTH_ORG_MAPPING:\s*"([^"]*)"', text)
     if not m:
         return text, False  # prod compose has no OIDC block: nothing to do
-    entries = f"{group_base}-viewers:{org_id}:Viewer, {group_base}-editors:{org_id}:Editor"
+    entries = f"{group_base}-viewers:{company_org_id}:Viewer, {group_base}-editors:{company_org_id}:Editor"
     inner = m.group(1).rstrip()
     sep = ", " if inner else ""
     return text.replace(
@@ -365,15 +385,18 @@ def ensure_env_example(text, instance):
     return text + f"{prefix}_OTEL_TOKEN=changeme-{instance}-token\n", True
 
 
-def ensure_datasources(text, instance, company, org_id, template="keve_ubix"):
+def ensure_datasources(text, instance, company, org_id, template="keve"):
+    """Ensure the 3 per-company datasources exist. Instances in an existing
+    company reuse them (no change); a new company is cloned from the
+    template company's blocks with name/header/orgId swapped."""
     sec = re.search(r"^datasources:\s*$\n?", text, re.M)
     if not sec:
         fail("datasources: section not found in grafana/datasources.yml")
+    if re.search(rf"^  - name: {re.escape(company)}-metrics\s*$", text, re.M):
+        return text, False
     head, body = text[: sec.end()], text[sec.end():]
     changed = False
     for sig in ("metrics", "logs", "traces"):
-        if re.search(rf"^  - name: {re.escape(instance)}-{sig}\s*$", body, re.M):
-            continue
         m = re.search(
             rf"(^  - name: {re.escape(template)}-{sig}\s*\n(?:.*\n)*?)"
             r"(?=^  - name: |\Z|^# Repeat)",
@@ -382,7 +405,7 @@ def ensure_datasources(text, instance, company, org_id, template="keve_ubix"):
         )
         if not m:
             fail(f"template datasource {template}-{sig} not found")
-        new = m.group(1).replace(f"name: {template}-{sig}", f"name: {instance}-{sig}")
+        new = m.group(1).replace(f"name: {template}-{sig}", f"name: {company}-{sig}")
         new = re.sub(r"orgId:\s*\d+", f"orgId: {org_id}", new)
         # Template header is a company (keve/bci): swap to the new company.
         new = re.sub(r"httpHeaderValue1: \S+", f"httpHeaderValue1: {company}", new)
@@ -397,7 +420,7 @@ def main():
     ap.add_argument("project", help="project id, e.g. ubix")
     ap.add_argument("--port", type=int, default=None)
     ap.add_argument("--grafana-org-id", type=int, default=None)
-    ap.add_argument("--template", default="keve_ubix")
+    ap.add_argument("--template", default="keve")
     ap.add_argument("--no-token", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
@@ -409,7 +432,7 @@ def main():
             fail(f"{label} id must match [a-z0-9]([a-z0-9-]*[a-z0-9])?")
     instance = f"{company}_{project}"
     prefix = instance.upper()
-    grafana_org = instance
+    grafana_org = company
 
     routing_text = ROUTING.read_text()
     collector_text = COLLECTOR_CFG.read_text()
@@ -423,20 +446,14 @@ def main():
         fail(f"--port {port} looks wrong; expected 43xx-44xx")
 
     datasources_text = DATASOURCES.read_text()
-    already = re.search(rf"^  - name: {re.escape(instance)}-metrics\s*$", datasources_text, re.M)
-    org_id = args.grafana_org_id or next_free_org_id(datasources_text)
-    if not already and args.grafana_org_id is None:
-        pass  # fresh instance takes next free id
-    if already and not args.grafana_org_id:
-        m = re.search(
-            rf"^  - name: {re.escape(instance)}-metrics\s*\n(?:.*\n)*?\s*orgId:\s*(\d+)",
-            datasources_text,
-            re.M,
-        )
-        if m:
-            org_id = int(m.group(1))
-    if org_id < 2:
-        fail(f"--grafana-org-id {org_id} looks wrong; org 1 is Main Org")
+    # Company orgs are shared: reuse the company's org id when its
+    # datasources exist, else take the next free id (new company).
+    if args.grafana_org_id is not None:
+        org_id = args.grafana_org_id
+    else:
+        org_id = company_org_id(datasources_text, company)
+    if org_id < 3:
+        fail(f"--grafana-org-id {org_id} looks wrong; orgs 1-2 are reserved (personal + Main Org)")
 
     token = None if args.no_token else secrets.token_hex(32)
 
@@ -470,7 +487,7 @@ def main():
     for path, (new_text, _) in edits.items():
         Path(path).write_text(new_text)
 
-    print(f"added instance '{instance}' (company={company} project={project}) on port {port} (grafana org id {org_id})")
+    print(f"added instance '{instance}' (company={company} project={project}) on port {port} (company org '{company}' id {org_id})")
     for f in changed_files:
         print(f"  updated {Path(f).relative_to(ROOT)}")
     if not changed_files:
@@ -480,15 +497,18 @@ def main():
         print(f"  {prefix}_OTEL_TOKEN={token}")
         print(f"Deploy with: {prefix}_OTEL_TOKEN=<token> docker compose -f compose.prod.yml up -d --build")
     print(
-        f"\nManual - needs the running stack (orgs cannot be file-provisioned):\n"
-        f"  1. Create the Grafana org named '{grafana_org}' (API or admin UI).\n"
+        f"\nManual - only for a NEW company (orgs cannot be file-provisioned):\n"
+        f"  1. Create the Grafana org named '{company}' (API or admin UI).\n"
         f"     It MUST get id {org_id}; if it gets another id, re-run with\n"
         f"     --grafana-org-id <actual-id> to rewrite the files.\n"
+        f"     Instances in an existing company reuse its org: skip this.\n"
         f"  2. Keycloak: create groups '{instance.replace('_', '-')}-viewers' and\n"
         f"     '{instance.replace('_', '-')}-editors' (plus '{company}-admins' for\n"
         f"     company admins).\n"
-        f"  3. Redeploy Grafana, have users log out/in, then verify Explore in\n"
-        f"     org '{grafana_org}' shows only {instance}-* sources."
+        f"  3. In org '{company}', add a folder per project and set each\n"
+        f"     dashboard's project.id filter; restrict the folders with Teams.\n"
+        f"  4. Redeploy Grafana, have users log out/in, then verify Explore in\n"
+        f"     org '{company}' shows only {company}-* sources."
     )
     print("\nNext: python3 -m pytest gateway/tests/ tests/ -v")
 

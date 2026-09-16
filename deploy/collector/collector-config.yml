@@ -8,13 +8,13 @@
 # `transform/*_identity` processors then overwrite BOTH attributes with the
 # authenticated values as defense in depth.
 #
-# Isolation model (Option B, soft project isolation, proxy-ready):
+# Isolation model (company orgs, soft project isolation, proxy-ready):
 #   tenant (company, HARD storage isolation): keve, bci -> X-Scope-OrgID on
 #     the 6 SHARED company exporters below (Mimir, Loki and Tempo all use
 #     X-Scope-OrgID for multitenancy when enabled server-side).
 #   project (SOFT query isolation): ubix, digiflow -> `project.id` attribute
-#     + default Grafana filter per instance org. Documented as soft: the
-#     company is the hard security boundary.
+#     + default Grafana filter per project folder inside the company org.
+#     Documented as soft: the company is the hard security boundary.
 #   instance (ingest identity): keve_ubix, keve_digiflow, bci_ubix,
 #     bci_digiflow -> 4 receivers, 4 identity transforms, 12 pipelines
 #     (traces|metrics|logs per instance -> shared company exporter).

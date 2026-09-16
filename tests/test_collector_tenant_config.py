@@ -1,9 +1,12 @@
-"""Static consistency tests: gateway, collector, registry and compose agree (Option B).
+"""Static consistency tests: gateway, collector, registry and compose agree.
 
 Model:
   tenant (company, HARD storage isolation): keve, bci -> X-Scope-OrgID.
   project (soft query isolation): ubix, digiflow -> project.id attribute.
   instance (ingest identity): keve_ubix, keve_digiflow, bci_ubix, bci_digiflow.
+  Grafana orgs are per COMPANY (Main:2, keve:3, bci:4 on fresh Grafana 12 —
+  org 1 is the bootstrap admin's personal org and is unused); projects live
+  inside their company org with a fixed project.id filter (soft).
 
 Run:  python3 -m pytest tests/ -v
 Requires: pytest, pyyaml.
@@ -60,6 +63,8 @@ def test_instance_sets_match_everywhere(routing):
         assert info["storage_tenant"] == instances[instance]["tenant"]
         assert info["storage_tenant"] == tenants[info["storage_tenant"]]["id"]
         assert instances[instance]["project"] in tenants[info["storage_tenant"]]["projects"]
+        # Grafana orgs are per company: the instance's org is its company.
+        assert instances[instance]["grafana_org"] == info["storage_tenant"]
 
 
 def test_per_instance_receivers_match_gateway_upstreams(collector, routing):
@@ -177,25 +182,34 @@ def _datasources_by_name():
     return {d["name"]: d for d in docs.get("datasources", [])}
 
 
-def test_per_instance_grafana_datasources_isolated(routing):
+def test_company_grafana_datasources(routing):
+    """Each company org owns exactly 3 datasources (<company>-metrics/logs/
+    traces) with the COMPANY header; no per-instance datasources exist."""
     by_name = _datasources_by_name()
+    for instance in routing["tenants"]:
+        for sig in ("metrics", "logs", "traces"):
+            assert f"{instance}-{sig}" not in by_name, (
+                f"retired per-instance datasource {instance}-{sig} still present"
+            )
     org_ids = {}
-    for instance, info in routing["tenants"].items():
+    companies = {info["storage_tenant"] for info in routing["tenants"].values()}
+    for company in companies:
         orgs = set()
         for sig, dtype in (("metrics", "prometheus"), ("logs", "loki"), ("traces", "tempo")):
-            name = f"{instance}-{sig}"
+            name = f"{company}-{sig}"
             assert name in by_name, f"missing Grafana datasource {name}"
             ds = by_name[name]
             assert ds["type"] == dtype, f"{name} has wrong type"
             assert ds.get("orgId", 1) != 1, f"{name} must not live in Main Org"
             # Datasource header is the COMPANY (hard boundary); the project
             # filter is soft (dashboard variable / future read-proxy).
-            assert ds["secureJsonData"]["httpHeaderValue1"] == info["storage_tenant"]
+            assert ds["secureJsonData"]["httpHeaderValue1"] == company
             orgs.add(ds["orgId"])
-        assert len(orgs) == 1, f"{instance} datasources span multiple orgs: {orgs}"
-        org_ids[instance] = orgs.pop()
-    assert len(set(org_ids.values())) == len(org_ids), f"instances share a Grafana org: {org_ids}"
-    assert set(org_ids.values()) >= {2, 3, 4, 5}
+        assert len(orgs) == 1, f"{company} datasources span multiple orgs: {orgs}"
+        org_ids[company] = orgs.pop()
+    assert len(set(org_ids.values())) == len(org_ids), f"companies share a Grafana org: {org_ids}"
+    assert org_ids["keve"] == 3
+    assert org_ids["bci"] == 4
 
 
 def test_org_mapping_covers_instances(routing):
@@ -210,15 +224,16 @@ def test_org_mapping_covers_instances(routing):
     mapping = m.group(1)
     by_name = _datasources_by_name()
     for required in (
-        "obs-platform-admins:1:Admin", "obs-platform-admins:2:Admin",
-        "obs-platform-admins:3:Admin", "obs-platform-admins:4:Admin",
-        "obs-platform-admins:5:Admin",
-        "keve-admins:2:Admin", "keve-admins:3:Admin",
-        "bci-admins:4:Admin", "bci-admins:5:Admin",
+        "obs-platform-admins:2:Admin", "obs-platform-admins:3:Admin",
+        "obs-platform-admins:4:Admin",
+        "keve-admins:3:Admin", "bci-admins:4:Admin",
     ):
         assert required in mapping, f"{required} missing from ORG_MAPPING"
-    for instance in routing["tenants"]:
-        org_id = by_name[f"{instance}-metrics"]["orgId"]
+    for retired in ("obs-platform-admins:5:Admin", "keve-admins:2:Admin", "bci-admins:3:Admin"):
+        assert retired not in mapping, f"retired instance org mapping {retired} still present"
+    for instance, info in routing["tenants"].items():
+        company = info["storage_tenant"]
+        org_id = by_name[f"{company}-metrics"]["orgId"]
         group_base = instance.replace("_", "-")
         assert f"{group_base}-viewers:{org_id}:Viewer" in mapping
         assert f"{group_base}-editors:{org_id}:Editor" in mapping

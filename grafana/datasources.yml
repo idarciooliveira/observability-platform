@@ -1,19 +1,47 @@
 apiVersion: 1
 
-# Option B (soft project isolation, proxy-ready):
+# Tenant model: company orgs (fresh Grafana 12: org 1 is the bootstrap
+# admin's personal org and is NOT used by the platform).
 #   Storage isolation is per COMPANY (X-Scope-OrgID = keve | bci).
-#   Each instance org (keve_ubix:2, keve_digiflow:3, bci_ubix:4, bci_digiflow:5)
-#   owns 3 datasources pointing at its COMPANY header. Project isolation
-#   inside a company is SOFT: dashboards carry a fixed project.id variable;
-#   viewers get no Explore/create. The company is the hard security boundary.
+#   Grafana orgs are per COMPANY: Main:2, keve:3, bci:4.
+#   Each company org owns 3 datasources (<company>-metrics/logs/traces)
+#   pointing at its COMPANY header. Projects (ubix, digiflow, ...) live
+#   INSIDE the company org as folders/teams with a fixed project.id
+#   dashboard filter (soft). Viewers get no Explore/create. The company is
+#   the hard security boundary.
 #   Both tenant.id + project.id are stored, so a future read-proxy needs no
 #   re-ingestion.
-# Platform Org (1) owns platform telemetry. Instance orgs never receive it.
-# The ubix-*/digiflow-* entries below remove the orphaned pre-Option-B
-# datasources (they pointed at the retired per-project OrgIDs).
+# Main Org. (2) owns platform telemetry. Company orgs never receive it.
+# The deleteDatasources entries below remove the retired per-instance
+# datasources (keve_ubix-*, keve_digiflow-*, bci_ubix-*, bci_digiflow-*)
+# plus the older orphaned per-project ones (ubix-*, digiflow-*).
 deleteDatasources:
   - name: platform-metrics
-    orgId: 1
+    orgId: 2
+  - name: keve_ubix-metrics
+    orgId: 2
+  - name: keve_ubix-logs
+    orgId: 2
+  - name: keve_ubix-traces
+    orgId: 2
+  - name: keve_digiflow-metrics
+    orgId: 3
+  - name: keve_digiflow-logs
+    orgId: 3
+  - name: keve_digiflow-traces
+    orgId: 3
+  - name: bci_ubix-metrics
+    orgId: 4
+  - name: bci_ubix-logs
+    orgId: 4
+  - name: bci_ubix-traces
+    orgId: 4
+  - name: bci_digiflow-metrics
+    orgId: 5
+  - name: bci_digiflow-logs
+    orgId: 5
+  - name: bci_digiflow-traces
+    orgId: 5
   - name: ubix-metrics
     orgId: 2
   - name: ubix-logs
@@ -31,41 +59,14 @@ datasources:
   - name: platform-metrics
     uid: platform-metrics
     type: prometheus
-    orgId: 1
+    orgId: 2
     url: http://mimir:9009/prometheus
     jsonData:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
       httpHeaderValue1: platform
 
-  - name: keve_ubix-metrics
-    type: prometheus
-    orgId: 2
-    url: http://mimir:9009/prometheus
-    jsonData:
-      httpHeaderName1: X-Scope-OrgID
-    secureJsonData:
-      httpHeaderValue1: keve
-
-  - name: keve_ubix-logs
-    type: loki
-    orgId: 2
-    url: http://loki:3100
-    jsonData:
-      httpHeaderName1: X-Scope-OrgID
-    secureJsonData:
-      httpHeaderValue1: keve
-
-  - name: keve_ubix-traces
-    type: tempo
-    orgId: 2
-    url: http://tempo:3200
-    jsonData:
-      httpHeaderName1: X-Scope-OrgID
-    secureJsonData:
-      httpHeaderValue1: keve
-
-  - name: keve_digiflow-metrics
+  - name: keve-metrics
     type: prometheus
     orgId: 3
     url: http://mimir:9009/prometheus
@@ -74,7 +75,7 @@ datasources:
     secureJsonData:
       httpHeaderValue1: keve
 
-  - name: keve_digiflow-logs
+  - name: keve-logs
     type: loki
     orgId: 3
     url: http://loki:3100
@@ -83,7 +84,7 @@ datasources:
     secureJsonData:
       httpHeaderValue1: keve
 
-  - name: keve_digiflow-traces
+  - name: keve-traces
     type: tempo
     orgId: 3
     url: http://tempo:3200
@@ -92,7 +93,7 @@ datasources:
     secureJsonData:
       httpHeaderValue1: keve
 
-  - name: bci_ubix-metrics
+  - name: bci-metrics
     type: prometheus
     orgId: 4
     url: http://mimir:9009/prometheus
@@ -101,7 +102,7 @@ datasources:
     secureJsonData:
       httpHeaderValue1: bci
 
-  - name: bci_ubix-logs
+  - name: bci-logs
     type: loki
     orgId: 4
     url: http://loki:3100
@@ -110,7 +111,7 @@ datasources:
     secureJsonData:
       httpHeaderValue1: bci
 
-  - name: bci_ubix-traces
+  - name: bci-traces
     type: tempo
     orgId: 4
     url: http://tempo:3200
@@ -119,33 +120,6 @@ datasources:
     secureJsonData:
       httpHeaderValue1: bci
 
-  - name: bci_digiflow-metrics
-    type: prometheus
-    orgId: 5
-    url: http://mimir:9009/prometheus
-    jsonData:
-      httpHeaderName1: X-Scope-OrgID
-    secureJsonData:
-      httpHeaderValue1: bci
-
-  - name: bci_digiflow-logs
-    type: loki
-    orgId: 5
-    url: http://loki:3100
-    jsonData:
-      httpHeaderName1: X-Scope-OrgID
-    secureJsonData:
-      httpHeaderValue1: bci
-
-  - name: bci_digiflow-traces
-    type: tempo
-    orgId: 5
-    url: http://tempo:3200
-    jsonData:
-      httpHeaderName1: X-Scope-OrgID
-    secureJsonData:
-      httpHeaderValue1: bci
-
-# Repeat per instance. Never expose an unrestricted shared datasource.
+# Repeat per company. Never expose an unrestricted shared datasource.
 # Project filter (soft) is enforced at the dashboard/variable layer, and
 # later by the Phase 2 read-proxy — not by the datasource header.

@@ -1,6 +1,9 @@
 # Grafana RBAC: flat Keycloak groups + GF_AUTH_GENERIC_OAUTH_ORG_MAPPING.
 #
-# Grafana orgs: Main:1, keve_ubix:2, keve_digiflow:3, bci_ubix:4, bci_digiflow:5.
+# Grafana orgs: Main:2, keve:3, bci:4 (company tenants; projects live
+# inside their company org as folders/teams with a fixed project.id filter).
+# (Fresh Grafana 12 reserves org 1 for the bootstrap admin's personal org;
+# the platform does not use it.)
 # - obs-platform-admins -> Admin 1,2,3,4,5 (Platform Team, unchanged)
 # - keve-admins -> Admin 2,3 ; bci-admins -> Admin 4,5 (company-admin)
 # - keve-ubix-viewers/editors -> Viewer/Editor 2 only, etc. (8 project groups)
@@ -49,5 +52,5 @@ groups:
     organizations:
       bci_digiflow: Editor
 
-# Each instance organization has instance-specific datasources sharing its
+# Each company organization has company-wide datasources sharing its
 # company header, plus a fixed project.id dashboard filter (soft).

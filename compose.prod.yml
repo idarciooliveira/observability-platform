@@ -73,6 +73,8 @@ services:
       - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
       - ./grafana/platform-overview.json:/var/lib/grafana/dashboards/platform-overview.json:ro
+      - ./grafana/dashboards/keve:/var/lib/grafana/dashboards/keve:ro
+      - ./grafana/dashboards/bci:/var/lib/grafana/dashboards/bci:ro
 
   mimir:
     image: grafana/mimir:2.16.0
@@ -81,14 +83,30 @@ services:
   loki:
     image: grafana/loki:3.7.6
     restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./deploy/local/loki.yml:/etc/loki/loki.yml:ro
 
   tempo:
     image: grafana/tempo:2.8.0
     restart: unless-stopped
 
   keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    image: quay.io/keycloak/keycloak:26.2
     restart: unless-stopped
+    # One-shot bootstrap: imports identity/keycloak-realm.json on first boot
+    # only (realm exists -> no-op). Rotate the grafana client secret to
+    # KEYCLOAK_GRAFANA_CLIENT_SECRET after first import; later realm edits
+    # need keycloak-config-cli / kcadm.sh, not a re-import.
+    command: ["start", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:?KC_BOOTSTRAP_ADMIN_PASSWORD is not set}
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY: edge
+      KC_HTTP_ENABLED: "true"
+    volumes:
+      - ./identity/keycloak-realm.json:/opt/keycloak/data/import/observability-realm.json:ro
 
 volumes:
   platform-prometheus-data:
